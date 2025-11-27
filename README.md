@@ -18,22 +18,20 @@ Character-driven feedback platform for iOS apps. Make customer support delightfu
 Add Cuti-E to your project using Xcode:
 
 1. File → Add Package Dependencies...
-2. Enter the repository URL: `https://github.com/Stig-Johnny/cutie`
-3. Select "ios" folder as the package path
-4. Select version or branch
-5. Add to your target
+2. Enter the repository URL: `https://github.com/cuti-e/ios-sdk`
+3. Select version or branch
+4. Add to your target
 
 Or add it to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Stig-Johnny/cutie.git", from: "1.0.0")
+    .package(url: "https://github.com/cuti-e/ios-sdk.git", from: "1.0.0")
 ],
 targets: [
     .target(
         name: "YourTarget",
-        dependencies: ["CutiE"],
-        path: "ios"
+        dependencies: ["CutiE"]
     )
 ]
 ```
