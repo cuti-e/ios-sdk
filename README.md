@@ -366,7 +366,7 @@ MIT License - See LICENSE file for details
 
 - 📧 Email: support@cuti-e.com
 - 🌐 Website: https://cuti-e.com
-- 📚 Docs: https://github.com/cuti-e/ios-sdk
+- 📚 Docs: https://cuti-e.com/docs/
 
 ---
 
