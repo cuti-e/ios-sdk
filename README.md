@@ -26,7 +26,7 @@ Or add it to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/cuti-e/ios-sdk.git", from: "1.0.73")
+    .package(url: "https://github.com/cuti-e/ios-sdk.git", from: "1.0.74")
 ],
 targets: [
     .target(
@@ -35,6 +35,26 @@ targets: [
     )
 ]
 ```
+
+## Getting Your Credentials
+
+Before integrating the SDK, you'll need an **API Key** and **App ID** from the Cuti-E admin dashboard.
+
+### 1. Get Your API Key
+
+1. Go to [admin.cuti-e.com](https://admin.cuti-e.com)
+2. Sign in or create an account
+3. Navigate to **Settings** in the sidebar
+4. Copy your **API Key** from the API Keys section
+
+### 2. Create an App ID
+
+1. In the admin dashboard, go to **Settings > Apps**
+2. Click **Add App**
+3. Enter your app's name and bundle identifier (e.g., `com.yourcompany.yourapp`)
+4. Copy the generated **App ID**
+
+> **Tip:** Use the sandbox API for development: `https://cutie-worker-sandbox.invotekas.workers.dev`
 
 ## Quick Start
 
@@ -79,8 +99,8 @@ struct ContentView: View {
             showFeedback = true
         }
         .sheet(isPresented: $showFeedback) {
-            CutiEFeedbackView { conversation in
-                print("Feedback submitted: \(conversation.id)")
+            CutiEFeedbackView { conversationId in
+                print("Feedback submitted: \(conversationId)")
             }
         }
     }
@@ -98,8 +118,8 @@ CutiE.shared.createConversation(
     title: "Crash on Save"
 ) { result in
     switch result {
-    case .success(let conversation):
-        print("Created conversation: \(conversation.id)")
+    case .success(let conversationId):
+        print("Created conversation: \(conversationId)")
     case .failure(let error):
         print("Error: \(error.localizedDescription)")
     }
@@ -160,59 +180,7 @@ let message = try await CutiE.shared.sendMessage(
 )
 ```
 
-## Advanced Usage
-
-### List Conversations
-
-```swift
-CutiE.shared.listConversations { result in
-    switch result {
-    case .success(let conversations):
-        print("Found \(conversations.count) conversations")
-        for conversation in conversations {
-            print("- \(conversation.title ?? "Untitled") (\(conversation.status.displayName))")
-        }
-    case .failure(let error):
-        print("Error: \(error.localizedDescription)")
-    }
-}
-```
-
-### Get Conversation with Messages
-
-```swift
-CutiE.shared.getConversation("conv_abc123") { result in
-    switch result {
-    case .success(let conversation):
-        print("Conversation: \(conversation.title ?? "Untitled")")
-        print("Messages: \(conversation.messages?.count ?? 0)")
-
-        conversation.messages?.forEach { message in
-            print("\(message.senderName): \(message.message)")
-        }
-    case .failure(let error):
-        print("Error: \(error.localizedDescription)")
-    }
-}
-```
-
-### Send Message
-
-```swift
-CutiE.shared.sendMessage(
-    "Thanks for the help!",
-    in: "conv_abc123"
-) { result in
-    switch result {
-    case .success(let message):
-        print("Message sent: \(message.id)")
-    case .failure(let error):
-        print("Error: \(error.localizedDescription)")
-    }
-}
-```
-
-### Push Notifications
+## Push Notifications
 
 Enable push notifications to notify users when they receive responses to their feedback.
 
@@ -389,8 +357,8 @@ public enum ConversationStatus: String {
 ```swift
 CutiE.shared.createConversation(...) { result in
     switch result {
-    case .success(let conversation):
-        // Handle success
+    case .success(let conversationId):
+        // Handle success - conversationId is a String
     case .failure(let error):
         switch error {
         case .notConfigured:
