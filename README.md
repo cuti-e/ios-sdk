@@ -26,7 +26,7 @@ Or add it to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/cuti-e/ios-sdk.git", from: "1.0.0")
+    .package(url: "https://github.com/cuti-e/ios-sdk.git", from: "1.0.73")
 ],
 targets: [
     .target(
@@ -48,12 +48,16 @@ import CutiE
 // In AppDelegate.swift
 func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
 
-    // Configure with your API key from the admin dashboard
-    CutiE.shared.configure(apiKey: "your_api_key_here")
+    // Configure with your API key and App ID from the admin dashboard
+    CutiE.shared.configure(
+        apiKey: "your_api_key_here",
+        appId: "your_app_id_here"  // Create in Settings → Apps
+    )
 
     // For testing, use the sandbox environment:
     // CutiE.shared.configure(
-    //     apiKey: "dfc651dc574cbddf88332b1acd2e5c2234110e993b2d338d1cb2be21df47c8b2",
+    //     apiKey: "your_api_key",
+    //     appId: "your_app_id",
     //     apiURL: "https://cutie-worker-sandbox.invotekas.workers.dev"
     // )
 
@@ -100,6 +104,60 @@ CutiE.shared.createConversation(
         print("Error: \(error.localizedDescription)")
     }
 }
+```
+
+## In-app Inbox (iOS 15+)
+
+Let users view their feedback conversations and admin replies directly in your app.
+
+### Show Inbox
+
+Present the inbox modally:
+
+```swift
+// From any view controller
+CutiE.shared.showInbox()
+
+// Or from a specific view controller
+CutiE.shared.showInbox(from: self)
+```
+
+### SwiftUI Integration
+
+```swift
+import SwiftUI
+import CutiE
+
+struct SettingsView: View {
+    @State private var showInbox = false
+
+    var body: some View {
+        List {
+            Button("My Feedback") {
+                showInbox = true
+            }
+        }
+        .sheet(isPresented: $showInbox) {
+            CutiEInboxView()
+        }
+    }
+}
+```
+
+### Async/Await API (iOS 15+)
+
+```swift
+// Get all conversations
+let conversations = try await CutiE.shared.getConversations()
+
+// Get single conversation with messages
+let conversation = try await CutiE.shared.getConversation(id: "conv_abc123")
+
+// Send a reply
+let message = try await CutiE.shared.sendMessage(
+    conversationId: "conv_abc123",
+    message: "Thanks for the help!"
+)
 ```
 
 ## Advanced Usage
