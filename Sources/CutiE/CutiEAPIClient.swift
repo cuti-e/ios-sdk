@@ -15,10 +15,11 @@ internal class CutiEAPIClient {
         self.configuration = configuration
 
         // Set delegateQueue to .main for SwiftUI compatibility
+        // Use certificate pinning for secure API communication
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
-        self.session = URLSession(configuration: config, delegate: nil, delegateQueue: .main)
+        self.session = CutiECertificatePinning.shared.createPinnedSession(configuration: config)
     }
 
     // MARK: - Conversations
@@ -133,6 +134,50 @@ internal class CutiEAPIClient {
         let body: [String: Any] = ["message": message]
 
         request(endpoint: endpoint, method: "POST", body: body, completion: completion)
+    }
+
+    // MARK: - Async/Await Wrappers (iOS 15+)
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func getConversations() async throws -> [Conversation] {
+        try await withCheckedThrowingContinuation { continuation in
+            listConversations { result in
+                switch result {
+                case .success(let conversations):
+                    continuation.resume(returning: conversations)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func getConversation(id: String) async throws -> Conversation {
+        try await withCheckedThrowingContinuation { continuation in
+            getConversation(id) { result in
+                switch result {
+                case .success(let conversation):
+                    continuation.resume(returning: conversation)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func sendMessage(conversationId: String, message: String) async throws -> Message {
+        try await withCheckedThrowingContinuation { continuation in
+            sendMessage(message, in: conversationId) { result in
+                switch result {
+                case .success(let message):
+                    continuation.resume(returning: message)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 
     // MARK: - Push Notifications

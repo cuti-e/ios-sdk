@@ -1,4 +1,9 @@
 import Foundation
+import SwiftUI
+
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Main Cuti-E SDK class
 public class CutiE {
@@ -129,6 +134,78 @@ public class CutiE {
             completion: completion
         )
     }
+
+    // MARK: - Inbox (iOS 15+)
+
+    /// Get all conversations for this device
+    /// - Returns: Array of conversations
+    @available(iOS 15.0, macOS 12.0, *)
+    public func getConversations() async throws -> [Conversation] {
+        guard let client = apiClient else {
+            throw CutiEError.notConfigured
+        }
+        return try await client.getConversations()
+    }
+
+    /// Get a single conversation with messages
+    /// - Parameter id: Conversation ID
+    /// - Returns: Conversation with messages
+    @available(iOS 15.0, macOS 12.0, *)
+    public func getConversation(id: String) async throws -> Conversation {
+        guard let client = apiClient else {
+            throw CutiEError.notConfigured
+        }
+        return try await client.getConversation(id: id)
+    }
+
+    /// Send a message in a conversation
+    /// - Parameters:
+    ///   - conversationId: Conversation ID
+    ///   - message: Message content
+    /// - Returns: The sent message
+    @available(iOS 15.0, macOS 12.0, *)
+    public func sendMessage(conversationId: String, message: String) async throws -> Message {
+        guard let client = apiClient else {
+            throw CutiEError.notConfigured
+        }
+        return try await client.sendMessage(conversationId: conversationId, message: message)
+    }
+
+    #if os(iOS)
+    // MARK: - Inbox UI
+
+    /// Present the inbox view modally
+    /// - Parameter from: The view controller to present from (optional, will find topmost if nil)
+    @available(iOS 15.0, *)
+    public func showInbox(from viewController: UIViewController? = nil) {
+        guard isConfigured else {
+            NSLog("[CutiE] Cannot show inbox: SDK not configured")
+            return
+        }
+
+        let inboxView = CutiEInboxView()
+        let hostingController = UIHostingController(rootView: inboxView)
+        hostingController.modalPresentationStyle = .pageSheet
+
+        let presenter = viewController ?? Self.topViewController()
+        presenter?.present(hostingController, animated: true)
+    }
+
+    /// Find the topmost view controller
+    private static func topViewController() -> UIViewController? {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first(where: { $0.isKeyWindow }),
+              var topController = window.rootViewController else {
+            return nil
+        }
+
+        while let presented = topController.presentedViewController {
+            topController = presented
+        }
+
+        return topController
+    }
+    #endif
 }
 
 /// CutiE Configuration
