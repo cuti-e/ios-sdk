@@ -9,6 +9,13 @@ internal struct CreateConversationResponse: Codable {
     let messageId: String?
     let createdAt: Int?
 
+    enum CodingKeys: String, CodingKey {
+        case conversationId = "conversation_id"
+        case status
+        case messageId = "message_id"
+        case createdAt = "created_at"
+    }
+
     /// Get status as ConversationStatus enum, defaulting to .open if invalid or missing
     var conversationStatus: ConversationStatus {
         guard let status = status,
