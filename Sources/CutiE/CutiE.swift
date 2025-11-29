@@ -171,6 +171,25 @@ public class CutiE {
         return try await client.sendMessage(conversationId: conversationId, message: message)
     }
 
+    /// Get the count of unread messages (admin replies not yet read)
+    /// - Returns: Number of unread messages
+    @available(iOS 15.0, macOS 12.0, *)
+    public func getUnreadCount() async throws -> Int {
+        guard let client = apiClient else {
+            throw CutiEError.notConfigured
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            client.getUnreadCount { result in
+                switch result {
+                case .success(let count):
+                    continuation.resume(returning: count)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
     #if os(iOS)
     // MARK: - Inbox UI
 

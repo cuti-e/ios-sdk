@@ -242,6 +242,20 @@ internal class CutiEAPIClient {
         }
     }
 
+    /// Get unread message count
+    func getUnreadCount(completion: @escaping (Result<Int, CutiEError>) -> Void) {
+        let endpoint = "/v1/conversations?limit=1"  // Minimal query just to get unread count
+
+        request(endpoint: endpoint, method: "GET") { (result: Result<ConversationsListResponse, CutiEError>) in
+            switch result {
+            case .success(let response):
+                completion(.success(response.totalUnread ?? 0))
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
     func getConversation(_ conversationID: String, completion: @escaping (Result<Conversation, CutiEError>) -> Void) {
         let endpoint = "/v1/conversations/\(conversationID)"
         request(endpoint: endpoint, method: "GET", completion: completion)
@@ -517,6 +531,12 @@ internal class CutiEAPIClient {
 
 private struct ConversationsListResponse: Decodable {
     let conversations: [Conversation]
+    let totalUnread: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case conversations
+        case totalUnread = "total_unread"
+    }
 }
 
 private struct ErrorResponse: Decodable {
