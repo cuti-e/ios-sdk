@@ -484,7 +484,7 @@ internal class CutiEAPIClient {
             // Decode success response
             do {
                 let decoder = JSONDecoder()
-                decoder.keyDecodingStrategy = .convertFromSnakeCase
+                // Note: Don't use .convertFromSnakeCase since models have explicit CodingKeys
                 let result = try decoder.decode(T.self, from: data)
                 completion(.success(result))
             } catch {
