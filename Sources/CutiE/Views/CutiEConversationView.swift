@@ -60,14 +60,13 @@ public struct CutiEConversationView: View {
     }
 
     private var inputArea: some View {
-        HStack(spacing: 12) {
-            TextField("Type a message...", text: $viewModel.messageText, axis: .vertical)
+        HStack(alignment: .bottom, spacing: 12) {
+            TextField("Type a message...", text: $viewModel.messageText)
                 .textFieldStyle(.plain)
                 .padding(10)
                 .background(Color(.systemGray6))
                 .clipShape(RoundedRectangle(cornerRadius: 20))
                 .focused($isInputFocused)
-                .lineLimit(1...5)
 
             Button {
                 Task { await viewModel.sendMessage() }

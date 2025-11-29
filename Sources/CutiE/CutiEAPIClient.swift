@@ -1,5 +1,6 @@
 import Foundation
 import CommonCrypto
+import Security
 
 #if canImport(UIKit)
 import UIKit
@@ -11,6 +12,15 @@ internal class CutiEAPIClient {
     internal let configuration: CutiEConfiguration
     private let session: URLSession
 
+    /// Device token for authentication (stored in Keychain)
+    private var deviceToken: String? {
+        get { getDeviceTokenFromKeychain() }
+        set { saveDeviceTokenToKeychain(newValue) }
+    }
+
+    /// Whether we've attempted to register for a device token this session
+    private var hasAttemptedTokenRegistration = false
+
     init(configuration: CutiEConfiguration) {
         self.configuration = configuration
 
@@ -20,6 +30,118 @@ internal class CutiEAPIClient {
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
         self.session = CutiECertificatePinning.shared.createPinnedSession(configuration: config)
+    }
+
+    // MARK: - Keychain Storage for Device Token
+
+    private let deviceTokenKeychainKey = "com.cutie.deviceToken"
+
+    private func getDeviceTokenFromKeychain() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: deviceTokenKeychainKey,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let token = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        return token
+    }
+
+    private func saveDeviceTokenToKeychain(_ token: String?) {
+        // First, delete any existing token
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: deviceTokenKeychainKey
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        // If token is nil, we're done (just wanted to delete)
+        guard let token = token, let data = token.data(using: .utf8) else { return }
+
+        // Add the new token
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: deviceTokenKeychainKey,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]
+
+        SecItemAdd(addQuery as CFDictionary, nil)
+    }
+
+    // MARK: - Device Token Registration
+
+    /// Register device and get a device token for future API calls
+    private func registerDeviceToken(completion: @escaping (String?) -> Void) {
+        guard let url = URL(string: "\(configuration.apiURL)/v1/device/register") else {
+            completion(nil)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(configuration.apiKey, forHTTPHeaderField: "X-API-Key")
+        request.setValue(configuration.deviceID, forHTTPHeaderField: "X-Device-ID")
+
+        // Include device info
+        var body: [String: Any] = [:]
+        if let appVersion = configuration.appVersion {
+            body["app_version"] = appVersion
+        }
+        if let appId = configuration.appId {
+            body["app_name"] = appId
+        } else if let appName = configuration.appName {
+            body["app_name"] = appName
+        }
+        #if os(iOS)
+        body["os_version"] = UIDevice.current.systemVersion
+        body["device_model"] = UIDevice.current.model
+        #endif
+
+        if !body.isEmpty {
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        }
+
+        let task = session.dataTask(with: request) { [weak self] data, response, error in
+            guard error == nil,
+                  let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode >= 200 && httpResponse.statusCode < 300,
+                  let data = data else {
+                completion(nil)
+                return
+            }
+
+            // Parse response
+            struct RegisterResponse: Decodable {
+                let deviceToken: String
+                let tokenId: String
+                let isNew: Bool
+            }
+
+            do {
+                let decoder = JSONDecoder()
+                decoder.keyDecodingStrategy = .convertFromSnakeCase
+                let response = try decoder.decode(RegisterResponse.self, from: data)
+
+                // Save to keychain
+                self?.deviceToken = response.deviceToken
+                completion(response.deviceToken)
+            } catch {
+                completion(nil)
+            }
+        }
+        task.resume()
     }
 
     // MARK: - Conversations
@@ -265,6 +387,41 @@ internal class CutiEAPIClient {
         body: [String: Any]? = nil,
         completion: @escaping (Result<T, CutiEError>) -> Void
     ) {
+        // Try to get or register device token first (if not already attempted this session)
+        ensureDeviceToken { [weak self] in
+            self?.performRequest(endpoint: endpoint, method: method, body: body, completion: completion)
+        }
+    }
+
+    /// Ensure we have a device token (register if needed)
+    private func ensureDeviceToken(completion: @escaping () -> Void) {
+        // If we already have a token, proceed immediately
+        if deviceToken != nil {
+            completion()
+            return
+        }
+
+        // If we've already tried to register this session, don't retry
+        if hasAttemptedTokenRegistration {
+            completion()
+            return
+        }
+
+        // Try to register for a device token (async, but don't block the request)
+        hasAttemptedTokenRegistration = true
+        registerDeviceToken { _ in
+            // Proceed regardless of success/failure
+            // API key fallback will handle authentication
+            completion()
+        }
+    }
+
+    private func performRequest<T: Decodable>(
+        endpoint: String,
+        method: String,
+        body: [String: Any]? = nil,
+        completion: @escaping (Result<T, CutiEError>) -> Void
+    ) {
         guard let url = URL(string: "\(configuration.apiURL)\(endpoint)") else {
             completion(.failure(.invalidRequest))
             return
@@ -274,6 +431,12 @@ internal class CutiEAPIClient {
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        // Use device token if available (preferred), otherwise fall back to API key
+        if let token = deviceToken {
+            request.setValue(token, forHTTPHeaderField: "X-Device-Token")
+        }
+        // Always include API key and device ID as fallback
         request.setValue(configuration.apiKey, forHTTPHeaderField: "X-API-Key")
         request.setValue(configuration.deviceID, forHTTPHeaderField: "X-Device-ID")
 
@@ -286,7 +449,7 @@ internal class CutiEAPIClient {
             }
         }
 
-        let task = session.dataTask(with: request) { data, response, error in
+        let task = session.dataTask(with: request) { [weak self] data, response, error in
             if let error = error {
                 completion(.failure(.networkError(error)))
                 return
@@ -304,6 +467,12 @@ internal class CutiEAPIClient {
 
             // Handle HTTP errors
             if httpResponse.statusCode >= 400 {
+                // If we get 401 with device token, it might be revoked - clear it and retry will use API key
+                if httpResponse.statusCode == 401 && self?.deviceToken != nil {
+                    self?.deviceToken = nil
+                    self?.hasAttemptedTokenRegistration = false
+                }
+
                 if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
                     completion(.failure(.serverError(httpResponse.statusCode, errorResponse.error)))
                 } else {
