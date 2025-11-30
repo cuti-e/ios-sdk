@@ -196,51 +196,219 @@ let message = try await CutiE.shared.sendMessage(
 
 Enable push notifications to notify users when they receive responses to their feedback.
 
-#### 1. Request Permission
+> **Important:** Push notifications require setup in **three places**: Xcode, Apple Developer Portal, and your code. Follow ALL steps below or notifications won't work.
 
-In your app's initialization (e.g., `AppDelegate` or `@main` App struct):
+---
+
+### Prerequisites (Do These First!)
+
+Before writing any code, you must complete these setup steps:
+
+#### Step 1: Enable Push Notifications in Xcode
+
+1. Open your project in Xcode
+2. Click on your **project name** in the left sidebar (the blue icon at the top)
+3. Select your **app target** (not the project)
+4. Click the **"Signing & Capabilities"** tab
+5. Click the **"+ Capability"** button (top left of the tab)
+6. Search for **"Push Notifications"** and double-click it
+7. You should now see "Push Notifications" listed under capabilities
+
+**What this does:** Creates the required entitlements file that tells iOS your app can receive push notifications.
+
+> **Troubleshooting:** If you don't see the "+ Capability" button, make sure you have a valid Apple Developer account connected in Xcode → Settings → Accounts.
+
+#### Step 2: Create an APNs Key in Apple Developer Portal
+
+1. Go to [developer.apple.com](https://developer.apple.com) and sign in
+2. Click **"Certificates, Identifiers & Profiles"**
+3. In the left sidebar, click **"Keys"**
+4. Click the **"+"** button to create a new key
+5. Enter a name like **"CutiE Push Key"**
+6. Check the box for **"Apple Push Notifications service (APNs)"**
+7. Click **"Continue"**, then **"Register"**
+8. **IMPORTANT:** Click **"Download"** to save the `.p8` file
+   - ⚠️ You can only download this file ONCE! Save it somewhere safe!
+9. Note down the **Key ID** shown on the page (e.g., `ABC123DEFG`)
+10. Also note your **Team ID** - find it at [developer.apple.com/account](https://developer.apple.com/account) in the top right
+
+**You now have:**
+- A `.p8` key file (e.g., `AuthKey_ABC123DEFG.p8`)
+- A Key ID (e.g., `ABC123DEFG`)
+- Your Team ID (e.g., `ABCD1234EF`)
+
+#### Step 3: Configure APNs in Cuti-E Admin Dashboard
+
+1. Go to [admin.cuti-e.com](https://admin.cuti-e.com) and sign in
+2. Navigate to **Settings** in the sidebar
+3. Scroll to the **"Push Notifications"** section
+4. Enter your **Key ID** from Step 2
+5. Enter your **Team ID** from Step 2
+6. Open your `.p8` file in a text editor and copy the entire contents
+7. Paste the key contents into the **"APNs Auth Key"** field
+8. Click **Save**
+
+**What this does:** Allows the Cuti-E backend to send push notifications to your app on your behalf.
+
+---
+
+### Code Integration
+
+Now that the prerequisites are complete, add the code to your app:
+
+#### Step 4: Request Permission (Required)
+
+In your `AppDelegate` or `@main` App struct, request permission to send notifications:
 
 ```swift
 import CutiE
 
 // Request permission (iOS 10+)
 CutiE.shared.pushNotifications.requestPermission { granted in
-    print("Push notifications \(granted ? "enabled" : "denied")")
+    if granted {
+        print("✅ Push notifications enabled!")
+    } else {
+        print("❌ User denied push notifications")
+    }
 }
 
 // Or using async/await (iOS 15+)
 let granted = await CutiE.shared.pushNotifications.requestPermission()
 ```
 
-#### 2. Register Device Token
+> **When to call this:** Call this after the user has used your app a bit, not immediately on first launch. Users are more likely to allow notifications if they understand the value.
 
-In your `AppDelegate`:
+#### Step 5: Register Device Token (Required)
+
+Add these methods to your `AppDelegate.swift`:
 
 ```swift
+import UIKit
 import CutiE
 
 class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(
         _ application: UIApplication,
-        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
-    ) {
-        // Pass the token to CutiE
-        CutiE.shared.pushNotifications.didRegisterForRemoteNotifications(withDeviceToken: deviceToken)
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+    ) -> Bool {
+
+        // Configure CutiE first
+        CutiE.shared.configure(
+            apiKey: "your_api_key",
+            appId: "your_app_id"
+        )
+
+        return true
     }
 
+    // Called when Apple gives us a device token
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        // Send the token to CutiE so we can send notifications to this device
+        CutiE.shared.pushNotifications.didRegisterForRemoteNotifications(withDeviceToken: deviceToken)
+        print("✅ Device token registered with CutiE")
+    }
+
+    // Called if registration fails
     func application(
         _ application: UIApplication,
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
         CutiE.shared.pushNotifications.didFailToRegisterForRemoteNotifications(withError: error)
+        print("❌ Failed to register for push notifications: \(error)")
     }
 }
 ```
 
-#### 3. Handle Notifications (Optional)
+**For SwiftUI apps:** If you're using SwiftUI with `@main`, you need to connect the AppDelegate:
 
-Implement the delegate to respond to notifications:
+```swift
+import SwiftUI
+
+@main
+struct YourApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+    }
+}
+```
+
+#### Step 6: Handle Incoming Notifications (Required)
+
+Add this to show notifications when the app is in the foreground and handle taps:
+
+```swift
+import UserNotifications
+import CutiE
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+
+    // Set up the delegate in didFinishLaunching
+    func setupNotifications() {
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    // Called when a notification arrives while app is in foreground
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        let userInfo = notification.request.content.userInfo
+
+        // Let CutiE handle it if it's a CutiE notification
+        CutiE.shared.pushNotifications.handleNotification(userInfo)
+
+        // Show the notification banner even when app is open
+        completionHandler([.banner, .sound, .badge])
+    }
+
+    // Called when user taps on a notification
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+
+        // Let CutiE handle the tap
+        CutiE.shared.pushNotifications.handleNotificationTap(userInfo)
+
+        completionHandler()
+    }
+}
+```
+
+Update your `didFinishLaunchingWithOptions` to set up the delegate:
+
+```swift
+func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+) -> Bool {
+
+    // Set up notification delegate
+    UNUserNotificationCenter.current().delegate = self
+
+    // Configure CutiE
+    CutiE.shared.configure(apiKey: "your_api_key", appId: "your_app_id")
+
+    return true
+}
+```
+
+---
+
+### Optional: Custom Notification Handling
+
+If you want to do something special when notifications arrive:
 
 ```swift
 import CutiE
@@ -259,45 +427,14 @@ class MyNotificationHandler: CutiEPushNotificationDelegate {
     func cutiEShouldOpenConversation(conversationId: String) {
         // User tapped notification - navigate to conversation
         print("Open conversation: \(conversationId)")
+
+        // Example: Open the inbox and show this conversation
+        CutiE.shared.showInbox()
     }
 }
 ```
 
-#### 4. Forward Notifications to CutiE
-
-In your `UNUserNotificationCenterDelegate`:
-
-```swift
-import UserNotifications
-import CutiE
-
-extension AppDelegate: UNUserNotificationCenterDelegate {
-
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification,
-        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
-    ) {
-        // Handle foreground notification
-        let userInfo = notification.request.content.userInfo
-        CutiE.shared.pushNotifications.handleNotification(userInfo)
-        completionHandler([.banner, .sound, .badge])
-    }
-
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse,
-        withCompletionHandler completionHandler: @escaping () -> Void
-    ) {
-        // Handle notification tap
-        let userInfo = response.notification.request.content.userInfo
-        CutiE.shared.pushNotifications.handleNotificationTap(userInfo)
-        completionHandler()
-    }
-}
-```
-
-#### 5. Check if Notification is from CutiE
+### Checking if a Notification is from CutiE
 
 ```swift
 let userInfo = notification.request.content.userInfo
@@ -305,6 +442,22 @@ if CutiE.shared.pushNotifications.isCutiENotification(userInfo) {
     // This is a CutiE notification
 }
 ```
+
+---
+
+### Testing Push Notifications
+
+1. **You must use a real device** - Push notifications do NOT work in the iOS Simulator
+2. Build and run on your device
+3. Allow notifications when prompted
+4. Submit feedback through your app
+5. Reply to the feedback in the Cuti-E Admin dashboard
+6. Within 1 minute, you should receive a push notification on your device
+
+**Troubleshooting:**
+- ❌ No notification? Check that all 3 prerequisites are complete
+- ❌ "Failed to register"? Make sure Push Notifications capability is added in Xcode
+- ❌ Still not working? Check the Cuti-E Admin dashboard logs for errors
 
 ## Models
 
