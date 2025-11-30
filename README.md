@@ -85,6 +85,18 @@ func application(_ application: UIApplication, didFinishLaunchingWithOptions lau
 }
 ```
 
+### Optional: Set User ID
+
+Track feedback by user for better support context:
+
+```swift
+// Set user ID to associate feedback with a specific user
+CutiE.shared.setUserId("user123")
+
+// Or set app metadata
+CutiE.shared.setAppMetadata(version: "1.2.0", build: "42")
+```
+
 ### 2. Show Feedback Form (SwiftUI)
 
 ```swift

@@ -99,6 +99,12 @@ public class CutiE {
         configuration?.userID = userID
     }
 
+    /// Set user ID for tracking (alias for setUserID)
+    /// - Parameter userId: Unique identifier for the current user
+    public func setUserId(_ userId: String?) {
+        setUserID(userId)
+    }
+
     /// Set app metadata
     /// - Parameters:
     ///   - version: App version
