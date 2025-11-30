@@ -190,6 +190,16 @@ public class CutiE {
         }
     }
 
+    // MARK: - Push Notifications
+
+    /// Register a push notification device token (hex string format)
+    /// Call this from your AppDelegate after receiving the device token
+    /// - Parameter deviceToken: The device token as a hex string
+    @available(iOS 10.0, macOS 10.14, *)
+    public func registerForPushNotifications(deviceToken: String) {
+        pushNotifications.registerToken(deviceToken)
+    }
+
     #if os(iOS)
     // MARK: - Inbox UI
 

@@ -128,7 +128,12 @@ public class CutiEPushNotifications: NSObject {
     public func didRegisterForRemoteNotifications(withDeviceToken deviceToken: Data) {
         let tokenParts = deviceToken.map { String(format: "%02.2hhx", $0) }
         let token = tokenParts.joined()
+        registerToken(token)
+    }
 
+    /// Register a device token (hex string format) with the CutiE backend
+    /// - Parameter token: The device token as a hex string
+    public func registerToken(_ token: String) {
         self.deviceToken = token
         NSLog("[CutiE] Received device token: \(token.prefix(16))...")
 

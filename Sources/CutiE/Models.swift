@@ -128,6 +128,7 @@ public struct Message: Codable, Identifiable {
     public let senderType: SenderType
     public let senderID: String?
     public let senderName: String?
+    public let senderAvatarUrl: String?
     public let message: String
     public let messageType: String
     public let isInternalNote: Bool
@@ -139,6 +140,7 @@ public struct Message: Codable, Identifiable {
         case senderType = "sender_type"
         case senderID = "sender_id"
         case senderName = "sender_name"
+        case senderAvatarUrl = "sender_avatar_url"
         case message
         case messageType = "message_type"
         case isInternalNote = "is_internal_note"

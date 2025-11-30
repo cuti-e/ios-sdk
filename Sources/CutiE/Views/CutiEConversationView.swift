@@ -103,21 +103,20 @@ private struct MessageBubble: View {
     let message: Message
 
     var body: some View {
-        HStack {
+        HStack(alignment: .bottom, spacing: 8) {
             if message.senderType == .user {
                 Spacer(minLength: 60)
+            } else if message.senderType == .admin {
+                // Avatar for admin/mascot
+                avatarView
             }
 
             VStack(alignment: message.senderType == .user ? .trailing : .leading, spacing: 4) {
                 if message.senderType == .admin {
-                    HStack(spacing: 4) {
-                        Image(systemName: "person.badge.shield.checkmark.fill")
-                            .font(.caption2)
-                        Text(message.senderName ?? "Support")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                    }
-                    .foregroundColor(.blue)
+                    Text(message.senderName ?? "Support")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.pink)
                 }
 
                 Text(message.message)
@@ -136,6 +135,34 @@ private struct MessageBubble: View {
                 Spacer(minLength: 60)
             }
         }
+    }
+
+    @ViewBuilder
+    private var avatarView: some View {
+        if let avatarUrl = message.senderAvatarUrl, let url = URL(string: avatarUrl) {
+            AsyncImage(url: url) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } placeholder: {
+                defaultAvatar
+            }
+            .frame(width: 32, height: 32)
+            .clipShape(Circle())
+        } else {
+            defaultAvatar
+        }
+    }
+
+    private var defaultAvatar: some View {
+        Circle()
+            .fill(Color.pink.opacity(0.2))
+            .frame(width: 32, height: 32)
+            .overlay(
+                Text(String((message.senderName ?? "S").prefix(1)))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.pink)
+            )
     }
 
     private var bubbleColor: Color {

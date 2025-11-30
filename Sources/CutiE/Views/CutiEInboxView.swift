@@ -100,11 +100,21 @@ private struct ConversationRow: View {
             }
 
             if let lastMessage = conversation.messages?.last {
-                HStack {
+                HStack(spacing: 6) {
                     if lastMessage.senderType == .admin {
-                        Image(systemName: "person.badge.shield.checkmark.fill")
+                        // Show small mascot indicator
+                        Circle()
+                            .fill(Color.pink.opacity(0.2))
+                            .frame(width: 16, height: 16)
+                            .overlay(
+                                Text(String((lastMessage.senderName ?? "S").prefix(1)))
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundColor(.pink)
+                            )
+                        Text(lastMessage.senderName ?? "Support")
                             .font(.caption)
-                            .foregroundColor(.blue)
+                            .foregroundColor(.pink)
+                            .fontWeight(.medium)
                     }
                     Text(lastMessage.message)
                         .font(.subheadline)
