@@ -326,6 +326,11 @@ internal class CutiEAPIClient {
             "push_token": token
         ]
 
+        // Send bundle_id so backend can link token to the correct app
+        if let bundleId = Bundle.main.bundleIdentifier {
+            body["bundle_id"] = bundleId
+        }
+
         if let userID = configuration.userID {
             body["user_id"] = userID
         }
