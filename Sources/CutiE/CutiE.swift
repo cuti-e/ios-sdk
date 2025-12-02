@@ -66,28 +66,6 @@ public class CutiE {
         }
     }
 
-    /// Configure CutiE with your API key (legacy method with appName)
-    /// - Parameters:
-    ///   - apiKey: Your Cuti-E API key from the admin dashboard
-    ///   - appName: Name of your app (deprecated, use appId instead)
-    ///   - apiURL: Optional custom API URL (defaults to production)
-    @available(*, deprecated, message: "Use configure(apiKey:appId:apiURL:) instead. Create an App in the admin dashboard to get an App ID.")
-    public func configure(apiKey: String, appName: String, apiURL: String = "https://api.cuti-e.com") {
-        self.configuration = CutiEConfiguration(
-            apiKey: apiKey,
-            apiURL: apiURL,
-            deviceID: deviceID,
-            appName: appName
-        )
-
-        self.apiClient = CutiEAPIClient(configuration: configuration!)
-
-        // Notify push notification manager that SDK is configured
-        if #available(iOS 10.0, macOS 10.14, *) {
-            CutiEPushNotifications.shared.onSDKConfigured()
-        }
-    }
-
     /// Check if CutiE is configured
     public var isConfigured: Bool {
         return configuration != nil && apiClient != nil
@@ -248,37 +226,17 @@ public class CutiEConfiguration {
     public let apiKey: String
     public let apiURL: String
     public let deviceID: String
-    public let appId: String?
-    public let appName: String?
+    public let appId: String
     public var userID: String?
     public var appVersion: String?
     public var appBuild: String?
 
-    /// Initialize with App ID (preferred)
+    /// Initialize with App ID
     init(apiKey: String, apiURL: String, deviceID: String, appId: String) {
         self.apiKey = apiKey
         self.apiURL = apiURL
         self.deviceID = deviceID
         self.appId = appId
-        self.appName = nil
-    }
-
-    /// Initialize with App Name (legacy, deprecated)
-    init(apiKey: String, apiURL: String, deviceID: String, appName: String) {
-        self.apiKey = apiKey
-        self.apiURL = apiURL
-        self.deviceID = deviceID
-        self.appId = nil
-        self.appName = appName
-    }
-
-    /// Initialize for testing (no app identifier)
-    init(apiKey: String, apiURL: String, deviceID: String) {
-        self.apiKey = apiKey
-        self.apiURL = apiURL
-        self.deviceID = deviceID
-        self.appId = nil
-        self.appName = nil
     }
 }
 

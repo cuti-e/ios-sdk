@@ -66,7 +66,6 @@ public struct Conversation: Codable, Identifiable {
         priority: ConversationPriority? = nil,
         assignedAdminID: String? = nil,
         appId: String? = nil,
-        appName: String? = nil,
         messageCount: Int? = nil,
         messages: [Message]? = nil,
         tags: [Tag]? = nil,
@@ -83,7 +82,7 @@ public struct Conversation: Codable, Identifiable {
         self.priority = priority
         self.assignedAdminID = assignedAdminID
         self.appId = appId
-        self.appName = appName
+        self.appName = nil  // Deprecated, kept for API backward compatibility
         self.messageCount = messageCount
         self.messages = messages
         self.tags = tags

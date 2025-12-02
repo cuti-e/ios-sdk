@@ -99,11 +99,7 @@ internal class CutiEAPIClient {
         if let appVersion = configuration.appVersion {
             body["app_version"] = appVersion
         }
-        if let appId = configuration.appId {
-            body["app_name"] = appId
-        } else if let appName = configuration.appName {
-            body["app_name"] = appName
-        }
+        body["app_id"] = configuration.appId
         #if os(iOS)
         body["os_version"] = UIDevice.current.systemVersion
         body["device_model"] = UIDevice.current.model
@@ -159,12 +155,7 @@ internal class CutiEAPIClient {
             "initial_message": message
         ]
 
-        // Prefer app_id over app_name
-        if let appId = configuration.appId {
-            body["app_id"] = appId
-        } else if let appName = configuration.appName {
-            body["app_name"] = appName
-        }
+        body["app_id"] = configuration.appId
 
         if let title = title {
             body["title"] = title
@@ -198,7 +189,6 @@ internal class CutiEAPIClient {
                     priority: nil,
                     assignedAdminID: nil,
                     appId: self.configuration.appId,
-                    appName: self.configuration.appName,
                     messageCount: nil,
                     messages: nil,
                     tags: nil,
