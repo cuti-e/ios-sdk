@@ -2,6 +2,8 @@
 
 Character-driven feedback platform for iOS apps. Make customer support delightful and on-brand.
 
+![Cuti-E SDK Banner](https://cuti-e.com/docs/images/sdk-banner-placeholder.png)
+
 ## Features
 
 - 📱 **Easy Integration** - Add feedback to your iOS app in minutes
@@ -119,6 +121,10 @@ struct ContentView: View {
 }
 ```
 
+<!-- TODO: Add screenshot -->
+![Feedback Form](https://cuti-e.com/docs/images/feedback-form-placeholder.png)
+*The feedback form allows users to submit bug reports, feature requests, and general feedback.*
+
 ### 3. Create Conversation Programmatically
 
 ```swift
@@ -141,6 +147,10 @@ CutiE.shared.createConversation(
 ## In-app Inbox (iOS 15+)
 
 Let users view their feedback conversations and admin replies directly in your app.
+
+<!-- TODO: Add screenshot -->
+![In-app Inbox](https://cuti-e.com/docs/images/inbox-placeholder.png)
+*The inbox shows all conversations and allows users to continue chatting with support.*
 
 ### Show Inbox
 
@@ -196,6 +206,10 @@ let message = try await CutiE.shared.sendMessage(
 
 Enable push notifications to notify users when they receive responses to their feedback.
 
+<!-- TODO: Add screenshot -->
+![Push Notification](https://cuti-e.com/docs/images/push-notification-placeholder.png)
+*Users receive push notifications when admins reply to their feedback.*
+
 > **Important:** Push notifications require setup in **three places**: Xcode, Apple Developer Portal, and your code. Follow ALL steps below or notifications won't work.
 
 ---
@@ -213,6 +227,10 @@ Before writing any code, you must complete these setup steps:
 5. Click the **"+ Capability"** button (top left of the tab)
 6. Search for **"Push Notifications"** and double-click it
 7. You should now see "Push Notifications" listed under capabilities
+
+<!-- TODO: Add screenshot -->
+![Xcode Push Capability](https://cuti-e.com/docs/images/xcode-push-capability-placeholder.png)
+*Adding the Push Notifications capability in Xcode.*
 
 **What this does:** Creates the required entitlements file that tells iOS your app can receive push notifications.
 
@@ -237,6 +255,10 @@ Before writing any code, you must complete these setup steps:
 - A Key ID (e.g., `ABC123DEFG`)
 - Your Team ID (e.g., `ABCD1234EF`)
 
+<!-- TODO: Add screenshot -->
+![Apple Developer Keys](https://cuti-e.com/docs/images/apple-developer-keys-placeholder.png)
+*Creating an APNs key in the Apple Developer Portal.*
+
 #### Step 3: Configure APNs in Cuti-E Admin Dashboard
 
 1. Go to [admin.cuti-e.com](https://admin.cuti-e.com) and sign in
@@ -247,6 +269,10 @@ Before writing any code, you must complete these setup steps:
 6. Open your `.p8` file in a text editor and copy the entire contents
 7. Paste the key contents into the **"APNs Auth Key"** field
 8. Click **Save**
+
+<!-- TODO: Add screenshot -->
+![Cuti-E Admin APNs Settings](https://cuti-e.com/docs/images/admin-apns-settings-placeholder.png)
+*Configuring APNs credentials in the Cuti-E Admin Dashboard.*
 
 **What this does:** Allows the Cuti-E backend to send push notifications to your app on your behalf.
 
