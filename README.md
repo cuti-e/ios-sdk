@@ -432,6 +432,35 @@ func application(
 
 ---
 
+### Step 7: Clear Badge Count (Recommended)
+
+The app icon badge accumulates as notifications arrive. Clear it when your app becomes active:
+
+```swift
+import SwiftUI
+import CutiE
+
+@main
+struct YourApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .onChange(of: scenePhase) { newPhase in
+                    if newPhase == .active {
+                        // Clear badge when app opens or comes to foreground
+                        CutiE.shared.pushNotifications.clearBadgeCount()
+                    }
+                }
+        }
+    }
+}
+```
+
+---
+
 ### Optional: Custom Notification Handling
 
 If you want to do something special when notifications arrive:

@@ -149,6 +149,30 @@ public struct Message: Codable, Identifiable {
     public var createdDate: Date {
         Date(timeIntervalSince1970: TimeInterval(createdAt) / 1000)
     }
+
+    public init(
+        id: String,
+        conversationID: String,
+        senderType: SenderType,
+        senderID: String? = nil,
+        senderName: String? = nil,
+        senderAvatarUrl: String? = nil,
+        message: String,
+        messageType: String = "text",
+        isInternalNote: Bool = false,
+        createdAt: Int64
+    ) {
+        self.id = id
+        self.conversationID = conversationID
+        self.senderType = senderType
+        self.senderID = senderID
+        self.senderName = senderName
+        self.senderAvatarUrl = senderAvatarUrl
+        self.message = message
+        self.messageType = messageType
+        self.isInternalNote = isInternalNote
+        self.createdAt = createdAt
+    }
 }
 
 /// Message sender type

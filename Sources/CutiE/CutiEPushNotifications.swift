@@ -191,6 +191,48 @@ public class CutiEPushNotifications: NSObject {
         }
     }
 
+    // MARK: - Badge Management
+
+    /// Clear the app icon badge count
+    /// Call this when your app becomes active to reset the badge
+    ///
+    /// Example usage in your App struct:
+    /// ```swift
+    /// @Environment(\.scenePhase) private var scenePhase
+    ///
+    /// var body: some Scene {
+    ///     WindowGroup {
+    ///         ContentView()
+    ///             .onChange(of: scenePhase) { newPhase in
+    ///                 if newPhase == .active {
+    ///                     CutiEPushNotifications.shared.clearBadgeCount()
+    ///                 }
+    ///             }
+    ///     }
+    /// }
+    /// ```
+    #if canImport(UserNotifications)
+    public func clearBadgeCount() {
+        if #available(iOS 16.0, macOS 13.0, *) {
+            UNUserNotificationCenter.current().setBadgeCount(0) { error in
+                if let error = error {
+                    NSLog("[CutiE] Failed to clear badge: \(error.localizedDescription)")
+                } else {
+                    NSLog("[CutiE] Badge count cleared")
+                }
+            }
+        } else {
+            // Fallback for older iOS versions
+            #if canImport(UIKit) && os(iOS)
+            DispatchQueue.main.async {
+                UIApplication.shared.applicationIconBadgeNumber = 0
+                NSLog("[CutiE] Badge count cleared (legacy)")
+            }
+            #endif
+        }
+    }
+    #endif
+
     // MARK: - Notification Handling
 
     /// Check if a notification is from CutiE
