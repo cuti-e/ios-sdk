@@ -49,6 +49,12 @@ public struct CutiEInboxView: View {
         .task {
             await viewModel.loadConversations()
         }
+        .onAppear {
+            // Reload when returning from conversation detail
+            if !viewModel.conversations.isEmpty {
+                Task { await viewModel.loadConversations() }
+            }
+        }
     }
 
     private var emptyState: some View {
