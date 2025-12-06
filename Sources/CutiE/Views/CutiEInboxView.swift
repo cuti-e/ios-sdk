@@ -49,12 +49,6 @@ public struct CutiEInboxView: View {
         .task {
             await viewModel.loadConversations()
         }
-        .onAppear {
-            // Reload when returning from conversation detail
-            if !viewModel.conversations.isEmpty {
-                Task { await viewModel.loadConversations() }
-            }
-        }
     }
 
     private var emptyState: some View {
@@ -76,6 +70,10 @@ public struct CutiEInboxView: View {
         List(viewModel.conversations) { conversation in
             NavigationLink {
                 CutiEConversationView(conversation: conversation)
+                    .onDisappear {
+                        // Refresh inbox when returning from conversation
+                        Task { await viewModel.loadConversations() }
+                    }
             } label: {
                 ConversationRow(conversation: conversation)
             }
