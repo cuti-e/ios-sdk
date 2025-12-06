@@ -60,9 +60,5 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.2' \
             -derivedDataPath .build
 
-      - name: Upload Documentation
-        uses: actions/upload-artifact@v4
-        with:
-          name: documentation
-          path: .build/Build/Products/Debug-iphonesimulator/CutiE.doccarchive
-          retention-days: 7
+      # Note: Upload disabled - DocC generates filenames with colons (Swift function signatures)
+      # which are invalid on Windows/NTFS and rejected by actions/upload-artifact
