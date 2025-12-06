@@ -50,6 +50,7 @@ public struct Conversation: Codable, Identifiable {
     public let appId: String?
     public let appName: String?
     public let messageCount: Int?
+    public let unreadCount: Int?
     public let messages: [Message]?
     public let tags: [Tag]?
     public let createdAt: Int64
@@ -67,6 +68,7 @@ public struct Conversation: Codable, Identifiable {
         assignedAdminID: String? = nil,
         appId: String? = nil,
         messageCount: Int? = nil,
+        unreadCount: Int? = nil,
         messages: [Message]? = nil,
         tags: [Tag]? = nil,
         createdAt: Int64,
@@ -84,6 +86,7 @@ public struct Conversation: Codable, Identifiable {
         self.appId = appId
         self.appName = nil  // Deprecated, kept for API backward compatibility
         self.messageCount = messageCount
+        self.unreadCount = unreadCount
         self.messages = messages
         self.tags = tags
         self.createdAt = createdAt
@@ -103,10 +106,16 @@ public struct Conversation: Codable, Identifiable {
         case appId = "app_id"
         case appName = "app_name"
         case messageCount = "message_count"
+        case unreadCount = "unread_count"
         case messages
         case tags
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+
+    /// Whether this conversation has unread messages
+    public var hasUnread: Bool {
+        (unreadCount ?? 0) > 0
     }
 
     public var createdDate: Date {

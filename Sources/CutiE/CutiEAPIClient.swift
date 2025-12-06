@@ -251,6 +251,19 @@ internal class CutiEAPIClient {
         request(endpoint: endpoint, method: "GET", completion: completion)
     }
 
+    /// Mark all messages in a conversation as read
+    func markAllMessagesRead(_ conversationID: String, completion: @escaping (Result<Void, CutiEError>) -> Void) {
+        let endpoint = "/v1/conversations/\(conversationID)/messages/mark-all-read"
+        request(endpoint: endpoint, method: "POST") { (result: Result<EmptyResponse, CutiEError>) in
+            switch result {
+            case .success:
+                completion(.success(()))
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
     func sendMessage(
         _ message: String,
         in conversationID: String,
@@ -299,6 +312,20 @@ internal class CutiEAPIClient {
                 switch result {
                 case .success(let message):
                     continuation.resume(returning: message)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func markAllMessagesRead(conversationId: String) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            markAllMessagesRead(conversationId) { result in
+                switch result {
+                case .success:
+                    continuation.resume()
                 case .failure(let error):
                     continuation.resume(throwing: error)
                 }

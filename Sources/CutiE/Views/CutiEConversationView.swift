@@ -48,6 +48,7 @@ public struct CutiEConversationView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.loadMessages()
+            await viewModel.markAsRead()
         }
         .alert("Error", isPresented: .init(
             get: { viewModel.errorMessage != nil },
@@ -215,6 +216,16 @@ private class ConversationViewModel: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    func markAsRead() async {
+        do {
+            try await CutiE.shared.apiClient?.markAllMessagesRead(conversationId: conversationId)
+            NSLog("[CutiE] Marked messages as read for \(conversationId)")
+        } catch {
+            // Silently ignore errors - this is not critical
+            NSLog("[CutiE] Failed to mark as read: \(error.localizedDescription)")
+        }
     }
 
     func sendMessage() async {
