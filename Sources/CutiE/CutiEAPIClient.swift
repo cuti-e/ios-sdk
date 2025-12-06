@@ -91,8 +91,15 @@ internal class CutiEAPIClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue(configuration.apiKey, forHTTPHeaderField: "X-API-Key")
+
+        // Use App ID for authentication (preferred method)
+        request.setValue(configuration.appId, forHTTPHeaderField: "X-App-ID")
         request.setValue(configuration.deviceID, forHTTPHeaderField: "X-Device-ID")
+
+        // Include API key as fallback for older server versions
+        if let apiKey = configuration.apiKey {
+            request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        }
 
         // Include device info
         var body: [String: Any] = [:]
@@ -469,20 +476,26 @@ internal class CutiEAPIClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        // Use device token if available (preferred), otherwise fall back to API key
+        // Use device token if available (preferred)
         if let token = deviceToken {
             request.setValue(token, forHTTPHeaderField: "X-Device-Token")
         }
-        // Always include API key and device ID as fallback
-        request.setValue(configuration.apiKey, forHTTPHeaderField: "X-API-Key")
+
+        // Always include App ID and device ID
+        request.setValue(configuration.appId, forHTTPHeaderField: "X-App-ID")
         request.setValue(configuration.deviceID, forHTTPHeaderField: "X-Device-ID")
+
+        // Include API key as fallback for older server versions (if available)
+        if let apiKey = configuration.apiKey {
+            request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        }
 
         // Diagnostic logging for auth debugging
         #if DEBUG
-        let apiKeyPreview = configuration.apiKey.isEmpty ? "(empty)" : String(configuration.apiKey.prefix(8)) + "..."
+        let apiKeyPreview = configuration.apiKey.map { $0.isEmpty ? "(empty)" : String($0.prefix(8)) + "..." } ?? "(not set)"
         NSLog("[CutiE] Request: %@ %@", method, endpoint)
-        NSLog("[CutiE] API Key: %@ | Device ID: %@", apiKeyPreview, configuration.deviceID)
-        NSLog("[CutiE] Has Device Token: %@", deviceToken != nil ? "yes" : "no")
+        NSLog("[CutiE] App ID: %@ | Device ID: %@", configuration.appId, configuration.deviceID)
+        NSLog("[CutiE] API Key: %@ | Has Device Token: %@", apiKeyPreview, deviceToken != nil ? "yes" : "no")
         if isRetry {
             NSLog("[CutiE] This is a RETRY (device token was cleared)")
         }

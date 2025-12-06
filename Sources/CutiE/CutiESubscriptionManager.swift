@@ -289,8 +289,11 @@ extension CutiEAPIClient {
         var request = URLRequest(url: URL(string: endpoint)!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(configuration.apiKey, forHTTPHeaderField: "X-API-Key")
+        request.setValue(configuration.appId, forHTTPHeaderField: "X-App-ID")
         request.setValue(configuration.deviceID, forHTTPHeaderField: "X-Device-ID")
+        if let apiKey = configuration.apiKey {
+            request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        }
 
         // Add device secret
         let secret = generateDeviceSecret()
@@ -324,8 +327,11 @@ extension CutiEAPIClient {
 
         var request = URLRequest(url: URL(string: endpoint)!)
         request.httpMethod = "GET"
-        request.setValue(configuration.apiKey, forHTTPHeaderField: "X-API-Key")
+        request.setValue(configuration.appId, forHTTPHeaderField: "X-App-ID")
         request.setValue(configuration.deviceID, forHTTPHeaderField: "X-Device-ID")
+        if let apiKey = configuration.apiKey {
+            request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        }
 
         let secret = generateDeviceSecret()
         request.setValue(secret, forHTTPHeaderField: "X-Device-Secret")

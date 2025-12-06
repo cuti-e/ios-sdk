@@ -45,27 +45,54 @@ public class CutiE {
         return CutiEPushNotifications.shared
     }
 
-    /// Configure CutiE with your API key and App ID
+    /// Configure CutiE with your App ID (recommended)
     /// - Parameters:
-    ///   - apiKey: Your Cuti-E API key from the admin dashboard
     ///   - appId: Your App ID from the admin dashboard (created in Settings > Apps)
     ///   - apiURL: Optional custom API URL (defaults to production)
-    public func configure(apiKey: String, appId: String, apiURL: String = "https://api.cuti-e.com") {
-        // Diagnostic logging
+    public func configure(appId: String, apiURL: String = "https://api.cuti-e.com") {
         #if DEBUG
-        let apiKeyPreview = apiKey.isEmpty ? "(EMPTY!)" : String(apiKey.prefix(8)) + "..."
         NSLog("[CutiE] Configuring SDK...")
-        NSLog("[CutiE]   API Key: %@", apiKeyPreview)
         NSLog("[CutiE]   App ID: %@", appId.isEmpty ? "(EMPTY!)" : appId)
         NSLog("[CutiE]   API URL: %@", apiURL)
         NSLog("[CutiE]   Device ID: %@", deviceID)
-        if apiKey.isEmpty {
-            NSLog("[CutiE] ⚠️ WARNING: API key is empty! Requests will fail with 401.")
+        if appId.isEmpty {
+            NSLog("[CutiE] ⚠️ WARNING: App ID is empty! Requests will fail.")
         }
         #endif
 
         self.configuration = CutiEConfiguration(
-            apiKey: apiKey,
+            apiKey: nil,
+            apiURL: apiURL,
+            deviceID: deviceID,
+            appId: appId
+        )
+
+        self.apiClient = CutiEAPIClient(configuration: configuration!)
+
+        // Notify push notification manager that SDK is configured
+        if #available(iOS 10.0, macOS 10.14, *) {
+            CutiEPushNotifications.shared.onSDKConfigured()
+        }
+    }
+
+    /// Configure CutiE with API key and App ID (legacy method, still supported)
+    /// - Parameters:
+    ///   - apiKey: Your Cuti-E API key from the admin dashboard
+    ///   - appId: Your App ID from the admin dashboard (created in Settings > Apps)
+    ///   - apiURL: Optional custom API URL (defaults to production)
+    @available(*, deprecated, message: "API key is no longer required. Use configure(appId:) instead.")
+    public func configure(apiKey: String, appId: String, apiURL: String = "https://api.cuti-e.com") {
+        #if DEBUG
+        let apiKeyPreview = apiKey.isEmpty ? "(not provided)" : String(apiKey.prefix(8)) + "..."
+        NSLog("[CutiE] Configuring SDK (legacy mode with API key)...")
+        NSLog("[CutiE]   API Key: %@", apiKeyPreview)
+        NSLog("[CutiE]   App ID: %@", appId.isEmpty ? "(EMPTY!)" : appId)
+        NSLog("[CutiE]   API URL: %@", apiURL)
+        NSLog("[CutiE]   Device ID: %@", deviceID)
+        #endif
+
+        self.configuration = CutiEConfiguration(
+            apiKey: apiKey.isEmpty ? nil : apiKey,
             apiURL: apiURL,
             deviceID: deviceID,
             appId: appId
@@ -236,7 +263,8 @@ public class CutiE {
 
 /// CutiE Configuration
 public class CutiEConfiguration {
-    public let apiKey: String
+    /// API key (optional, legacy - no longer required for new integrations)
+    public let apiKey: String?
     public let apiURL: String
     public let deviceID: String
     public let appId: String
@@ -244,8 +272,8 @@ public class CutiEConfiguration {
     public var appVersion: String?
     public var appBuild: String?
 
-    /// Initialize with App ID
-    init(apiKey: String, apiURL: String, deviceID: String, appId: String) {
+    /// Initialize with App ID (API key is optional)
+    init(apiKey: String?, apiURL: String, deviceID: String, appId: String) {
         self.apiKey = apiKey
         self.apiURL = apiURL
         self.deviceID = deviceID
