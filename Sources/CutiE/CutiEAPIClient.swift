@@ -477,6 +477,17 @@ internal class CutiEAPIClient {
         request.setValue(configuration.apiKey, forHTTPHeaderField: "X-API-Key")
         request.setValue(configuration.deviceID, forHTTPHeaderField: "X-Device-ID")
 
+        // Diagnostic logging for auth debugging
+        #if DEBUG
+        let apiKeyPreview = configuration.apiKey.isEmpty ? "(empty)" : String(configuration.apiKey.prefix(8)) + "..."
+        NSLog("[CutiE] Request: %@ %@", method, endpoint)
+        NSLog("[CutiE] API Key: %@ | Device ID: %@", apiKeyPreview, configuration.deviceID)
+        NSLog("[CutiE] Has Device Token: %@", deviceToken != nil ? "yes" : "no")
+        if isRetry {
+            NSLog("[CutiE] This is a RETRY (device token was cleared)")
+        }
+        #endif
+
         if let body = body {
             do {
                 request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -504,9 +515,17 @@ internal class CutiEAPIClient {
 
             // Handle HTTP errors
             if httpResponse.statusCode >= 400 {
+                #if DEBUG
+                let errorBody = String(data: data, encoding: .utf8) ?? "(no body)"
+                NSLog("[CutiE] HTTP %d Error: %@", httpResponse.statusCode, errorBody)
+                #endif
+
                 // If we get 401 with device token and haven't retried yet,
                 // clear the token and retry immediately with API key fallback
                 if httpResponse.statusCode == 401 && self?.deviceToken != nil && !isRetry {
+                    #if DEBUG
+                    NSLog("[CutiE] 401 with device token - clearing and retrying with API key")
+                    #endif
                     self?.deviceToken = nil
                     self?.hasAttemptedTokenRegistration = false
                     // Retry the request without device token (will use API key)

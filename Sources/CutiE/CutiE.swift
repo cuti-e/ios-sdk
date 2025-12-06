@@ -51,6 +51,19 @@ public class CutiE {
     ///   - appId: Your App ID from the admin dashboard (created in Settings > Apps)
     ///   - apiURL: Optional custom API URL (defaults to production)
     public func configure(apiKey: String, appId: String, apiURL: String = "https://api.cuti-e.com") {
+        // Diagnostic logging
+        #if DEBUG
+        let apiKeyPreview = apiKey.isEmpty ? "(EMPTY!)" : String(apiKey.prefix(8)) + "..."
+        NSLog("[CutiE] Configuring SDK...")
+        NSLog("[CutiE]   API Key: %@", apiKeyPreview)
+        NSLog("[CutiE]   App ID: %@", appId.isEmpty ? "(EMPTY!)" : appId)
+        NSLog("[CutiE]   API URL: %@", apiURL)
+        NSLog("[CutiE]   Device ID: %@", deviceID)
+        if apiKey.isEmpty {
+            NSLog("[CutiE] ⚠️ WARNING: API key is empty! Requests will fail with 401.")
+        }
+        #endif
+
         self.configuration = CutiEConfiguration(
             apiKey: apiKey,
             apiURL: apiURL,
