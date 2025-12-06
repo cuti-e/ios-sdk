@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ['*']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-14
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.0'
+
+      - name: Build for iOS
+        run: |
+          xcodebuild build \
+            -scheme CutiE \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.0' \
+            -skipPackagePluginValidation
+
+      - name: Build for macOS
+        run: |
+          xcodebuild build \
+            -scheme CutiE \
+            -destination 'platform=macOS'
+
+  docs:
+    name: Build Documentation
+    runs-on: macos-14
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.0'
+
+      - name: Build DocC Documentation
+        run: |
+          xcodebuild docbuild \
+            -scheme CutiE \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.0' \
+            -derivedDataPath .build
+
+      - name: Upload Documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: .build/Build/Products/Debug-iphonesimulator/CutiE.doccarchive
+          retention-days: 7
