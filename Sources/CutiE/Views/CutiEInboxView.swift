@@ -132,10 +132,20 @@ private struct ConversationRow: View {
             HStack {
                 statusBadge
                 Spacer()
-                if hasUnreadReplies {
-                    Circle()
-                        .fill(.blue)
-                        .frame(width: 10, height: 10)
+                // Show unread count badge if there are unread messages
+                if let unread = conversation.unreadCount, unread > 0 {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color.pink)
+                            .frame(width: 8, height: 8)
+                        Text("\(unread)")
+                            .font(.caption.bold())
+                            .foregroundColor(.pink)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.pink.opacity(0.15))
+                    .cornerRadius(12)
                 }
             }
         }
@@ -185,11 +195,6 @@ private struct ConversationRow: View {
         }
     }
 
-    private var hasUnreadReplies: Bool {
-        // Simple heuristic: if last message is from admin, show indicator
-        guard let lastMessage = conversation.messages?.last else { return false }
-        return lastMessage.senderType == .admin
-    }
 }
 
 // MARK: - View Model
