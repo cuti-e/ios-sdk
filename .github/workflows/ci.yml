@@ -30,7 +30,7 @@ jobs:
         run: |
           xcodebuild build \
             -scheme CutiE \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.0' \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.2' \
             -skipPackagePluginValidation
 
       - name: Build for macOS
@@ -57,7 +57,7 @@ jobs:
         run: |
           xcodebuild docbuild \
             -scheme CutiE \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.0' \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.2' \
             -derivedDataPath .build
 
       - name: Upload Documentation
