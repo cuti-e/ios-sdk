@@ -456,6 +456,7 @@ internal class CutiEAPIClient {
         endpoint: String,
         method: String,
         body: [String: Any]? = nil,
+        isRetry: Bool = false,
         completion: @escaping (Result<T, CutiEError>) -> Void
     ) {
         guard let url = URL(string: "\(configuration.apiURL)\(endpoint)") else {
@@ -503,10 +504,14 @@ internal class CutiEAPIClient {
 
             // Handle HTTP errors
             if httpResponse.statusCode >= 400 {
-                // If we get 401 with device token, it might be revoked - clear it and retry will use API key
-                if httpResponse.statusCode == 401 && self?.deviceToken != nil {
+                // If we get 401 with device token and haven't retried yet,
+                // clear the token and retry immediately with API key fallback
+                if httpResponse.statusCode == 401 && self?.deviceToken != nil && !isRetry {
                     self?.deviceToken = nil
                     self?.hasAttemptedTokenRegistration = false
+                    // Retry the request without device token (will use API key)
+                    self?.performRequest(endpoint: endpoint, method: method, body: body, isRetry: true, completion: completion)
+                    return
                 }
 
                 if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
