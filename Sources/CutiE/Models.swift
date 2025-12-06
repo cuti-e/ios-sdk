@@ -248,17 +248,6 @@ public enum ConversationCategory: String, Codable, CaseIterable {
         case .other: return "gray"
         }
     }
-
-    /// Emoji representation for quick visual identification
-    public var emoji: String {
-        switch self {
-        case .bug: return "🐛"
-        case .feature: return "✨"
-        case .question: return "❓"
-        case .feedback: return "💬"
-        case .other: return "📝"
-        }
-    }
 }
 
 /// Conversation status

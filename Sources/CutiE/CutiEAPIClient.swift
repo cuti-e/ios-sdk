@@ -91,12 +91,9 @@ internal class CutiEAPIClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-
-        // Use App ID for authentication (preferred method)
         request.setValue(configuration.appId, forHTTPHeaderField: "X-App-ID")
         request.setValue(configuration.deviceID, forHTTPHeaderField: "X-Device-ID")
-
-        // Include API key as fallback for older server versions
+        // Include API key if available (deprecated, for backwards compatibility)
         if let apiKey = configuration.apiKey {
             request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
         }
@@ -170,6 +167,10 @@ internal class CutiEAPIClient {
 
         if let userID = configuration.userID {
             body["user_id"] = userID
+        }
+
+        if let userName = configuration.userName {
+            body["user_name"] = userName
         }
 
         if let appVersion = configuration.appVersion {
@@ -277,7 +278,11 @@ internal class CutiEAPIClient {
         completion: @escaping (Result<Message, CutiEError>) -> Void
     ) {
         let endpoint = "/v1/conversations/\(conversationID)/messages"
-        let body: [String: Any] = ["message": message]
+        var body: [String: Any] = ["message": message]
+
+        if let userName = configuration.userName {
+            body["user_name"] = userName
+        }
 
         request(endpoint: endpoint, method: "POST", body: body, completion: completion)
     }
@@ -463,7 +468,6 @@ internal class CutiEAPIClient {
         endpoint: String,
         method: String,
         body: [String: Any]? = nil,
-        isRetry: Bool = false,
         completion: @escaping (Result<T, CutiEError>) -> Void
     ) {
         guard let url = URL(string: "\(configuration.apiURL)\(endpoint)") else {
@@ -480,26 +484,13 @@ internal class CutiEAPIClient {
         if let token = deviceToken {
             request.setValue(token, forHTTPHeaderField: "X-Device-Token")
         }
-
-        // Always include App ID and device ID
+        // Always include App ID and device ID for authentication
         request.setValue(configuration.appId, forHTTPHeaderField: "X-App-ID")
         request.setValue(configuration.deviceID, forHTTPHeaderField: "X-Device-ID")
-
-        // Include API key as fallback for older server versions (if available)
+        // Include API key if available (deprecated, for backwards compatibility)
         if let apiKey = configuration.apiKey {
             request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
         }
-
-        // Diagnostic logging for auth debugging
-        #if DEBUG
-        let apiKeyPreview = configuration.apiKey.map { $0.isEmpty ? "(empty)" : String($0.prefix(8)) + "..." } ?? "(not set)"
-        NSLog("[CutiE] Request: %@ %@", method, endpoint)
-        NSLog("[CutiE] App ID: %@ | Device ID: %@", configuration.appId, configuration.deviceID)
-        NSLog("[CutiE] API Key: %@ | Has Device Token: %@", apiKeyPreview, deviceToken != nil ? "yes" : "no")
-        if isRetry {
-            NSLog("[CutiE] This is a RETRY (device token was cleared)")
-        }
-        #endif
 
         if let body = body {
             do {
@@ -528,22 +519,10 @@ internal class CutiEAPIClient {
 
             // Handle HTTP errors
             if httpResponse.statusCode >= 400 {
-                #if DEBUG
-                let errorBody = String(data: data, encoding: .utf8) ?? "(no body)"
-                NSLog("[CutiE] HTTP %d Error: %@", httpResponse.statusCode, errorBody)
-                #endif
-
-                // If we get 401 with device token and haven't retried yet,
-                // clear the token and retry immediately with API key fallback
-                if httpResponse.statusCode == 401 && self?.deviceToken != nil && !isRetry {
-                    #if DEBUG
-                    NSLog("[CutiE] 401 with device token - clearing and retrying with API key")
-                    #endif
+                // If we get 401 with device token, it might be revoked - clear it and retry will use API key
+                if httpResponse.statusCode == 401 && self?.deviceToken != nil {
                     self?.deviceToken = nil
                     self?.hasAttemptedTokenRegistration = false
-                    // Retry the request without device token (will use API key)
-                    self?.performRequest(endpoint: endpoint, method: method, body: body, isRetry: true, completion: completion)
-                    return
                 }
 
                 if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {

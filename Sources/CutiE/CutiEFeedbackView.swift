@@ -8,6 +8,7 @@ public struct CutiEFeedbackView: View {
     @State private var selectedCategory: ConversationCategory = .feedback
     @State private var title: String = ""
     @State private var message: String = ""
+    @State private var userName: String = ""
     @State private var isSubmitting = false
     @State private var showError = false
     @State private var errorMessage = ""
@@ -16,6 +17,8 @@ public struct CutiEFeedbackView: View {
 
     public init(onSuccess: ((String) -> Void)? = nil) {
         self.onSuccess = onSuccess
+        // Initialize with any previously set user name
+        _userName = State(initialValue: CutiE.shared.configuration?.userName ?? "")
     }
 
     public var body: some View {
@@ -49,6 +52,14 @@ public struct CutiEFeedbackView: View {
                         )
                 } header: {
                     Text("Details")
+                }
+
+                Section {
+                    TextField("Your name (optional)", text: $userName)
+                } header: {
+                    Text("Your Info")
+                } footer: {
+                    Text("Add your name if you'd like us to know who you are")
                 }
 
                 Section {
@@ -96,6 +107,11 @@ public struct CutiEFeedbackView: View {
         guard !message.isEmpty else { return }
 
         isSubmitting = true
+
+        // Set user name if provided (persists for future feedback too)
+        if !userName.isEmpty {
+            CutiE.shared.setUserName(userName)
+        }
 
         CutiE.shared.createConversation(
             category: selectedCategory,
