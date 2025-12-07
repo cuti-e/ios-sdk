@@ -232,6 +232,17 @@ public enum ConversationCategory: String, Codable, CaseIterable {
         }
     }
 
+    /// Emoji representation for the category
+    public var emoji: String {
+        switch self {
+        case .bug: return "🐛"
+        case .feature: return "✨"
+        case .question: return "❓"
+        case .feedback: return "💬"
+        case .other: return "📝"
+        }
+    }
+
     /// SF Symbol name for professional icons
     public var sfSymbol: String {
         switch self {

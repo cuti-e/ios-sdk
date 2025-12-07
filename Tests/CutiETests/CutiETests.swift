@@ -19,27 +19,24 @@ final class CutiETests: XCTestCase {
 
     func testConfiguration() {
         // Given
-        let apiKey = "test_api_key_123"
         let appId = "app_test123"
         let apiURL = "https://test.api.com"
 
         // When
-        cutiE.configure(apiKey: apiKey, appId: appId, apiURL: apiURL)
+        cutiE.configure(appId: appId, apiURL: apiURL)
 
         // Then
         XCTAssertNotNil(cutiE.configuration)
-        XCTAssertEqual(cutiE.configuration?.apiKey, apiKey)
         XCTAssertEqual(cutiE.configuration?.apiURL, apiURL)
         XCTAssertEqual(cutiE.configuration?.appId, appId)
     }
 
     func testDefaultAPIURL() {
         // Given
-        let apiKey = "test_api_key_123"
         let appId = "app_test123"
 
         // When
-        cutiE.configure(apiKey: apiKey, appId: appId)
+        cutiE.configure(appId: appId)
 
         // Then
         XCTAssertEqual(cutiE.configuration?.apiURL, "https://api.cuti-e.com")
@@ -47,15 +44,14 @@ final class CutiETests: XCTestCase {
 
     func testDeviceIDGeneration() {
         // Given
-        let apiKey = "test_api_key_123"
         let appId = "app_test123"
 
         // When
-        cutiE.configure(apiKey: apiKey, appId: appId)
+        cutiE.configure(appId: appId)
         let deviceID1 = cutiE.configuration?.deviceID
 
         // Configure again
-        cutiE.configure(apiKey: apiKey, appId: appId)
+        cutiE.configure(appId: appId)
         let deviceID2 = cutiE.configuration?.deviceID
 
         // Then
