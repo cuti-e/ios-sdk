@@ -29,6 +29,7 @@ final class CutiETests: XCTestCase {
         XCTAssertNotNil(cutiE.configuration)
         XCTAssertEqual(cutiE.configuration?.apiURL, apiURL)
         XCTAssertEqual(cutiE.configuration?.appId, appId)
+        XCTAssertFalse(cutiE.configuration?.useAppAttest ?? true)
     }
 
     func testDefaultAPIURL() {
@@ -111,12 +112,12 @@ final class CutiETests: XCTestCase {
         XCTAssertEqual(ConversationCategory.other.displayName, "Other")
     }
 
-    func testConversationCategoryEmojis() {
-        XCTAssertEqual(ConversationCategory.bug.emoji, "🐛")
-        XCTAssertEqual(ConversationCategory.feature.emoji, "✨")
-        XCTAssertEqual(ConversationCategory.question.emoji, "❓")
-        XCTAssertEqual(ConversationCategory.feedback.emoji, "💬")
-        XCTAssertEqual(ConversationCategory.other.emoji, "📝")
+    func testConversationCategorySFSymbols() {
+        XCTAssertEqual(ConversationCategory.bug.sfSymbol, "ladybug.fill")
+        XCTAssertEqual(ConversationCategory.feature.sfSymbol, "sparkles")
+        XCTAssertEqual(ConversationCategory.question.sfSymbol, "questionmark.circle.fill")
+        XCTAssertEqual(ConversationCategory.feedback.sfSymbol, "bubble.left.and.bubble.right.fill")
+        XCTAssertEqual(ConversationCategory.other.sfSymbol, "ellipsis.circle.fill")
     }
 
     func testConversationStatusDisplayNames() {

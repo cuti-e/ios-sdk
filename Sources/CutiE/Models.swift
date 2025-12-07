@@ -232,17 +232,6 @@ public enum ConversationCategory: String, Codable, CaseIterable {
         }
     }
 
-    /// Emoji representation for the category
-    public var emoji: String {
-        switch self {
-        case .bug: return "🐛"
-        case .feature: return "✨"
-        case .question: return "❓"
-        case .feedback: return "💬"
-        case .other: return "📝"
-        }
-    }
-
     /// SF Symbol name for professional icons
     public var sfSymbol: String {
         switch self {
@@ -321,4 +310,113 @@ public enum ConversationPriority: String, Codable, CaseIterable {
         case .urgent: return "red"
         }
     }
+}
+
+// MARK: - Device Linking
+
+/// Response from initiating a device link token
+public struct LinkTokenResponse: Codable {
+    /// Token to encode in QR code
+    public let linkToken: String
+    /// When the token expires (Unix timestamp in ms)
+    public let expiresAt: Int64
+    /// Seconds until expiration
+    public let expiresIn: Int
+    /// Whether this device already has linked devices
+    public let hasExistingGroup: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case linkToken = "link_token"
+        case expiresAt = "expires_at"
+        case expiresIn = "expires_in"
+        case hasExistingGroup = "has_existing_group"
+    }
+
+    public var expirationDate: Date {
+        Date(timeIntervalSince1970: TimeInterval(expiresAt) / 1000)
+    }
+}
+
+/// Response from confirming a device link
+public struct LinkConfirmResponse: Codable {
+    public let success: Bool
+    public let groupId: String
+    public let message: String
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case groupId = "group_id"
+        case message
+    }
+}
+
+/// Status of a device link token
+public enum LinkTokenStatus: String, Codable {
+    case pending
+    case confirmed
+    case expired
+}
+
+/// Response from checking link token status
+public struct LinkStatusResponse: Codable {
+    public let status: LinkTokenStatus
+    public let linkToken: String?
+    public let groupId: String?
+    public let targetDeviceName: String?
+    public let confirmedAt: Int64?
+    public let expiresAt: Int64?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case linkToken = "link_token"
+        case groupId = "group_id"
+        case targetDeviceName = "target_device_name"
+        case confirmedAt = "confirmed_at"
+        case expiresAt = "expires_at"
+    }
+}
+
+/// A device linked to the current device's group
+public struct LinkedDevice: Codable, Identifiable {
+    public let deviceId: String
+    public let deviceName: String
+    public let joinedAt: Int64
+    public let isPrimary: Bool
+    public let isCurrent: Bool
+
+    public var id: String { deviceId }
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case deviceName = "device_name"
+        case joinedAt = "joined_at"
+        case isPrimary = "is_primary"
+        case isCurrent = "is_current"
+    }
+
+    public var joinedDate: Date {
+        Date(timeIntervalSince1970: TimeInterval(joinedAt) / 1000)
+    }
+}
+
+/// Response from listing linked devices
+public struct LinkedDevicesResponse: Codable {
+    /// Whether this device is linked to any group
+    public let linked: Bool
+    /// Group ID (if linked)
+    public let groupId: String?
+    /// All devices in the group
+    public let devices: [LinkedDevice]
+
+    enum CodingKeys: String, CodingKey {
+        case linked
+        case groupId = "group_id"
+        case devices
+    }
+}
+
+/// Response from unlinking a device
+internal struct UnlinkDeviceResponse: Codable {
+    let success: Bool
+    let message: String
 }

@@ -397,6 +397,215 @@ internal class CutiEAPIClient {
         }
     }
 
+    // MARK: - Device Linking
+
+    /// Initiate device linking - generates a token to encode in a QR code
+    /// The scanning device will use this token to link to the same inbox
+    func initiateLinkToken(completion: @escaping (Result<LinkTokenResponse, CutiEError>) -> Void) {
+        let endpoint = "/v1/sdk/link/initiate"
+        request(endpoint: endpoint, method: "POST", completion: completion)
+    }
+
+    /// Confirm device link after scanning a QR code
+    /// - Parameters:
+    ///   - linkToken: The token from the QR code
+    ///   - deviceName: Optional name for this device (shown in linked devices list)
+    func confirmLink(token linkToken: String, deviceName: String? = nil, completion: @escaping (Result<LinkConfirmResponse, CutiEError>) -> Void) {
+        let endpoint = "/v1/sdk/link/confirm"
+        var body: [String: Any] = ["link_token": linkToken]
+        if let deviceName = deviceName {
+            body["device_name"] = deviceName
+        }
+        request(endpoint: endpoint, method: "POST", body: body, completion: completion)
+    }
+
+    /// Check the status of a link token (for polling after showing QR code)
+    /// - Parameter linkToken: The token to check
+    func checkLinkStatus(token linkToken: String, completion: @escaping (Result<LinkStatusResponse, CutiEError>) -> Void) {
+        let endpoint = "/v1/sdk/link/status/\(linkToken)"
+        request(endpoint: endpoint, method: "GET", completion: completion)
+    }
+
+    /// Get all devices linked to this device's group
+    func getLinkedDevices(completion: @escaping (Result<LinkedDevicesResponse, CutiEError>) -> Void) {
+        let endpoint = "/v1/sdk/link/devices"
+        request(endpoint: endpoint, method: "GET", completion: completion)
+    }
+
+    /// Unlink a device from the group
+    /// - Parameter deviceId: The device ID to unlink (can be current device or another in the group)
+    func unlinkDevice(_ deviceId: String, completion: @escaping (Result<Void, CutiEError>) -> Void) {
+        let endpoint = "/v1/sdk/link/devices/\(deviceId)"
+        request(endpoint: endpoint, method: "DELETE") { (result: Result<UnlinkDeviceResponse, CutiEError>) in
+            switch result {
+            case .success:
+                completion(.success(()))
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    // MARK: - Device Linking (Async/Await)
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func initiateLinkToken() async throws -> LinkTokenResponse {
+        try await withCheckedThrowingContinuation { continuation in
+            initiateLinkToken { result in
+                switch result {
+                case .success(let response):
+                    continuation.resume(returning: response)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func confirmLink(token linkToken: String, deviceName: String? = nil) async throws -> LinkConfirmResponse {
+        try await withCheckedThrowingContinuation { continuation in
+            confirmLink(token: linkToken, deviceName: deviceName) { result in
+                switch result {
+                case .success(let response):
+                    continuation.resume(returning: response)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func checkLinkStatus(token linkToken: String) async throws -> LinkStatusResponse {
+        try await withCheckedThrowingContinuation { continuation in
+            checkLinkStatus(token: linkToken) { result in
+                switch result {
+                case .success(let response):
+                    continuation.resume(returning: response)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func getLinkedDevices() async throws -> LinkedDevicesResponse {
+        try await withCheckedThrowingContinuation { continuation in
+            getLinkedDevices { result in
+                switch result {
+                case .success(let response):
+                    continuation.resume(returning: response)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func unlinkDevice(_ deviceId: String) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            unlinkDevice(deviceId) { result in
+                switch result {
+                case .success:
+                    continuation.resume()
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    // MARK: - App Attest
+
+    /// Get a challenge for App Attest attestation
+    @available(iOS 14.0, macOS 11.0, *)
+    func getAttestChallenge() async throws -> AttestChallengeResponse {
+        try await withCheckedThrowingContinuation { continuation in
+            request(endpoint: "/v1/device/attest/challenge", method: "POST") { (result: Result<AttestChallengeResponse, CutiEError>) in
+                switch result {
+                case .success(let response):
+                    continuation.resume(returning: response)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Submit attestation to server
+    @available(iOS 14.0, macOS 11.0, *)
+    func submitAttestation(keyId: String, attestation: String) async throws {
+        let body: [String: Any] = [
+            "key_id": keyId,
+            "attestation": attestation
+        ]
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            request(endpoint: "/v1/device/attest", method: "POST", body: body) { (result: Result<AttestResponse, CutiEError>) in
+                switch result {
+                case .success:
+                    continuation.resume()
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Submit an assertion for verification
+    @available(iOS 14.0, macOS 11.0, *)
+    func submitAssertion(keyId: String, assertion: String, clientData: String) async throws {
+        let body: [String: Any] = [
+            "key_id": keyId,
+            "assertion": assertion,
+            "client_data": clientData
+        ]
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            request(endpoint: "/v1/device/attest/assert", method: "POST", body: body) { (result: Result<EmptyResponse, CutiEError>) in
+                switch result {
+                case .success:
+                    continuation.resume()
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Get attestation status
+    @available(iOS 14.0, macOS 11.0, *)
+    func getAttestStatus() async throws -> AttestationStatus {
+        try await withCheckedThrowingContinuation { continuation in
+            request(endpoint: "/v1/device/attest/status", method: "GET") { (result: Result<AttestationStatus, CutiEError>) in
+                switch result {
+                case .success(let response):
+                    continuation.resume(returning: response)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Revoke attestation
+    @available(iOS 14.0, macOS 11.0, *)
+    func revokeAttestation() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            request(endpoint: "/v1/device/attest", method: "DELETE") { (result: Result<EmptyResponse, CutiEError>) in
+                switch result {
+                case .success:
+                    continuation.resume()
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
     // MARK: - Device Signature
 
     static func generateDeviceSignature(deviceID: String, timestamp: String, salt: String) -> String {

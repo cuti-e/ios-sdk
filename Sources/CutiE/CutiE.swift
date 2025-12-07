@@ -23,6 +23,12 @@ public class CutiE {
         return CutiESubscriptionManager.shared
     }
 
+    /// App Attest manager for cryptographic device verification (iOS 14+)
+    @available(iOS 14.0, macOS 11.0, *)
+    public var appAttest: CutiEAppAttest {
+        return CutiEAppAttest.shared
+    }
+
     /// Device ID (persistent across app launches)
     private var deviceID: String {
         let key = "com.cutie.deviceID"
@@ -49,12 +55,14 @@ public class CutiE {
     /// - Parameters:
     ///   - appId: Your App ID from the admin dashboard (created in Settings > Apps)
     ///   - apiURL: Optional custom API URL (defaults to production)
-    public func configure(appId: String, apiURL: String = "https://api.cuti-e.com") {
+    ///   - useAppAttest: Enable Apple App Attest for enhanced security (iOS 14+). When enabled, requests are cryptographically signed by the Secure Enclave. Automatically falls back on unsupported devices.
+    public func configure(appId: String, apiURL: String = "https://api.cuti-e.com", useAppAttest: Bool = false) {
         self.configuration = CutiEConfiguration(
             apiKey: nil,
             apiURL: apiURL,
             deviceID: deviceID,
-            appId: appId
+            appId: appId,
+            useAppAttest: useAppAttest
         )
 
         self.apiClient = CutiEAPIClient(configuration: configuration!)
@@ -62,6 +70,43 @@ public class CutiE {
         // Notify push notification manager that SDK is configured
         if #available(iOS 10.0, macOS 10.14, *) {
             CutiEPushNotifications.shared.onSDKConfigured()
+        }
+
+        // Initialize App Attest if enabled
+        if useAppAttest {
+            if #available(iOS 14.0, macOS 11.0, *) {
+                initializeAppAttest()
+            } else {
+                NSLog("[CutiE] App Attest requested but requires iOS 14+ (current device not supported)")
+            }
+        }
+    }
+
+    /// Initialize App Attest in the background
+    @available(iOS 14.0, macOS 11.0, *)
+    private func initializeAppAttest() {
+        let appAttest = CutiEAppAttest.shared
+
+        guard appAttest.isSupported else {
+            NSLog("[CutiE] App Attest not supported on this device (simulator or older hardware)")
+            return
+        }
+
+        // If already attested, we're good
+        if appAttest.isAttested {
+            NSLog("[CutiE] App Attest: Device already attested")
+            return
+        }
+
+        // Perform attestation in background
+        Task {
+            do {
+                guard let client = apiClient else { return }
+                try await appAttest.performAttestation(apiClient: client)
+                NSLog("[CutiE] App Attest: Initial attestation completed")
+            } catch {
+                NSLog("[CutiE] App Attest: Initial attestation failed (will retry): \(error.localizedDescription)")
+            }
         }
     }
 
@@ -248,12 +293,16 @@ public class CutiEConfiguration {
     public var appVersion: String?
     public var appBuild: String?
 
+    /// Whether App Attest is enabled for enhanced security (iOS 14+)
+    public let useAppAttest: Bool
+
     /// Initialize with App ID (API key optional for backwards compatibility)
-    init(apiKey: String?, apiURL: String, deviceID: String, appId: String) {
+    init(apiKey: String?, apiURL: String, deviceID: String, appId: String, useAppAttest: Bool = false) {
         self.apiKey = apiKey
         self.apiURL = apiURL
         self.deviceID = deviceID
         self.appId = appId
+        self.useAppAttest = useAppAttest
     }
 }
 
