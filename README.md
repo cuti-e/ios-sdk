@@ -12,6 +12,8 @@ Character-driven feedback platform for iOS apps. Make customer support delightfu
 - 🎨 **SwiftUI & UIKit** - Works with both modern and legacy codebases
 - 🔒 **Privacy-First** - User data stays on your infrastructure
 - ⚡️ **Lightweight** - Minimal dependencies, small footprint
+- 🔐 **App Attest** - Enhanced device verification using Apple's secure enclave (iOS 14+)
+- 📲 **Device Linking** - Share conversation inbox across multiple devices via QR code
 
 ## Installation
 
@@ -28,7 +30,7 @@ Or add it to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/cuti-e/ios-sdk.git", from: "1.0.102")
+    .package(url: "https://github.com/cuti-e/ios-sdk.git", from: "1.0.103")
 ],
 targets: [
     .target(
@@ -502,6 +504,78 @@ if CutiE.shared.pushNotifications.isCutiENotification(userInfo) {
 - ❌ "Failed to register"? Make sure Push Notifications capability is added in Xcode
 - ❌ Still not working? Check the Cuti-E Admin dashboard logs for errors
 
+## App Attest (iOS 14+)
+
+App Attest provides enhanced device verification using Apple's secure enclave. When enabled, it cryptographically proves that API requests come from a legitimate copy of your app running on a real Apple device.
+
+### Enable App Attest
+
+```swift
+// Enable during configuration
+CutiE.shared.configure(
+    appId: "your_app_id",
+    useAppAttest: true  // Enable App Attest
+)
+```
+
+### Check Attestation Status
+
+```swift
+// Check if App Attest is supported on this device
+if CutiE.shared.appAttest.isSupported {
+    print("App Attest is supported")
+}
+
+// Check if device has been attested
+if CutiE.shared.appAttest.isAttested {
+    print("Device is attested")
+}
+```
+
+> **Note:** App Attest requires iOS 14+ and is not available on all devices (e.g., simulators). The SDK gracefully falls back to standard authentication when App Attest is unavailable.
+
+## Device Linking (iOS 15+)
+
+Device linking allows users to share their conversation inbox across multiple devices. For example, a user can link their iPad to their iPhone to see and respond to conversations from either device.
+
+### Generate Link Token (Source Device)
+
+```swift
+// Generate a link token to display as QR code
+let response = try await CutiE.shared.initiateLinkToken()
+let qrCodeData = response.linkToken  // Display this as QR code
+
+// Poll for link completion
+let status = try await CutiE.shared.checkLinkStatus(token: response.linkToken)
+if status.status == "linked" {
+    print("Device linked successfully!")
+}
+```
+
+### Confirm Link (Target Device)
+
+```swift
+// After scanning QR code, confirm the link
+let result = try await CutiE.shared.confirmLink(
+    token: scannedToken,
+    deviceName: "My iPad"  // Optional device name
+)
+print("Linked to group: \(result.linkedDeviceId)")
+```
+
+### Manage Linked Devices
+
+```swift
+// Get all linked devices
+let devices = try await CutiE.shared.getLinkedDevices()
+for device in devices.devices {
+    print("\(device.deviceName ?? "Unknown") - \(device.deviceId)")
+}
+
+// Unlink a device
+try await CutiE.shared.unlinkDevice(deviceId)
+```
+
 ## Models
 
 ### Conversation
@@ -598,9 +672,9 @@ MIT License - See LICENSE file for details
 
 ## Support
 
-- 📧 Email: support@cuti-e.com
-- 🌐 Website: https://cuti-e.com
-- 📚 Docs: https://cuti-e.com/docs/
+- 📧 Email: <support@cuti-e.com>
+- 🌐 Website: <https://cuti-e.com>
+- 📚 Docs: <https://cuti-e.com/docs/>
 
 ---
 
