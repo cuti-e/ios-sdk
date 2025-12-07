@@ -118,10 +118,11 @@ final class CutiEAPIIntegrationTests: XCTestCase {
         )
     }
 
-    func testCreateConversation() {
-        guard cutiE.configuration != nil else {
-            // Skip if not configured (no test API key)
-            return
+    func testCreateConversation() throws {
+        // Skip if test credentials are not set via environment variables
+        guard ProcessInfo.processInfo.environment["CUTIE_TEST_API_KEY"] != nil,
+              ProcessInfo.processInfo.environment["CUTIE_TEST_APP_ID"] != nil else {
+            throw XCTSkip("Skipping integration test: CUTIE_TEST_API_KEY and CUTIE_TEST_APP_ID environment variables not set")
         }
 
         let expectation = XCTestExpectation(description: "Create conversation")
