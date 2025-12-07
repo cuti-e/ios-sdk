@@ -105,12 +105,14 @@ final class CutiEAPIIntegrationTests: XCTestCase {
         cutiE = CutiE.shared
 
         // Configure with sandbox/test credentials
-        // These tests would only run if CUTIE_TEST_APP_ID environment variable is set
-        guard let appId = ProcessInfo.processInfo.environment["CUTIE_TEST_APP_ID"] else {
+        // These tests would only run if CUTIE_TEST_API_KEY environment variable is set
+        guard let apiKey = ProcessInfo.processInfo.environment["CUTIE_TEST_API_KEY"],
+              let appId = ProcessInfo.processInfo.environment["CUTIE_TEST_APP_ID"] else {
             return
         }
 
         cutiE.configure(
+            apiKey: apiKey,
             appId: appId,
             apiURL: "https://cutie-worker-sandbox.invotekas.workers.dev"
         )
