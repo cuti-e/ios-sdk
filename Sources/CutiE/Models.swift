@@ -41,6 +41,7 @@ public struct Conversation: Codable, Identifiable {
     public let id: String
     public let customerID: String?
     public let userID: String?
+    public let userName: String?
     public let deviceID: String?
     public let title: String?
     public let category: ConversationCategory?
@@ -60,6 +61,7 @@ public struct Conversation: Codable, Identifiable {
         id: String,
         customerID: String? = nil,
         userID: String? = nil,
+        userName: String? = nil,
         deviceID: String? = nil,
         title: String? = nil,
         category: ConversationCategory? = nil,
@@ -77,6 +79,7 @@ public struct Conversation: Codable, Identifiable {
         self.id = id
         self.customerID = customerID
         self.userID = userID
+        self.userName = userName
         self.deviceID = deviceID
         self.title = title
         self.category = category
@@ -97,6 +100,7 @@ public struct Conversation: Codable, Identifiable {
         case id = "conversation_id"
         case customerID = "customer_id"
         case userID = "user_id"
+        case userName = "user_name"
         case deviceID = "device_id"
         case title
         case category
