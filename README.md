@@ -28,7 +28,7 @@ Or add it to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/cuti-e/ios-sdk.git", from: "1.0.75")
+    .package(url: "https://github.com/cuti-e/ios-sdk.git", from: "1.0.102")
 ],
 targets: [
     .target(
@@ -38,23 +38,18 @@ targets: [
 ]
 ```
 
-## Getting Your Credentials
+## Getting Your App ID
 
-Before integrating the SDK, you'll need an **API Key** and **App ID** from the Cuti-E admin dashboard.
+Before integrating the SDK, you'll need an **App ID** from the Cuti-E admin dashboard.
 
-### 1. Get Your API Key
+### Create an App ID
 
 1. Go to [admin.cuti-e.com](https://admin.cuti-e.com)
 2. Sign in or create an account
-3. Navigate to **Settings** in the sidebar
-4. Copy your **API Key** from the API Keys section
-
-### 2. Create an App ID
-
-1. In the admin dashboard, go to **Settings > Apps**
-2. Click **Add App**
-3. Enter your app's name and bundle identifier (e.g., `com.yourcompany.yourapp`)
-4. Copy the generated **App ID**
+3. Navigate to **Settings > Apps** in the sidebar
+4. Click **Add App**
+5. Enter your app's name and bundle identifier (e.g., `com.yourcompany.yourapp`)
+6. Copy the generated **App ID**
 
 > **Tip:** Use the sandbox API for development: `https://cutie-worker-sandbox.invotekas.workers.dev`
 
@@ -70,15 +65,11 @@ import CutiE
 // In AppDelegate.swift
 func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
 
-    // Configure with your API key and App ID from the admin dashboard
-    CutiE.shared.configure(
-        apiKey: "your_api_key_here",
-        appId: "your_app_id_here"  // Create in Settings → Apps
-    )
+    // Configure with your App ID from the admin dashboard
+    CutiE.shared.configure(appId: "your_app_id_here")
 
     // For testing, use the sandbox environment:
     // CutiE.shared.configure(
-    //     apiKey: "your_api_key",
     //     appId: "your_app_id",
     //     apiURL: "https://cutie-worker-sandbox.invotekas.workers.dev"
     // )
@@ -320,10 +311,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
 
         // Configure CutiE first
-        CutiE.shared.configure(
-            apiKey: "your_api_key",
-            appId: "your_app_id"
-        )
+        CutiE.shared.configure(appId: "your_app_id")
 
         return true
     }
@@ -424,7 +412,7 @@ func application(
     UNUserNotificationCenter.current().delegate = self
 
     // Configure CutiE
-    CutiE.shared.configure(apiKey: "your_api_key", appId: "your_app_id")
+    CutiE.shared.configure(appId: "your_app_id")
 
     return true
 }
