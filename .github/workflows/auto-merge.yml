@@ -21,7 +21,7 @@ jobs:
         run: echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
 
       - name: Wait for CI checks
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             console.log('Waiting for CI checks to complete...');
