@@ -13,6 +13,7 @@ jobs:
     permissions:
       pull-requests: write
       contents: write
+      checks: read
 
     steps:
       - name: Get PR number
