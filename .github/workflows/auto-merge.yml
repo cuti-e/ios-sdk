@@ -8,7 +8,7 @@ on:
 jobs:
   auto-merge:
     name: Auto-merge Dependabot
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     if: github.actor == 'dependabot[bot]'
     permissions:
       pull-requests: write
