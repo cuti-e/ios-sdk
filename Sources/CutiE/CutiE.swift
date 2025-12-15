@@ -57,6 +57,12 @@ public class CutiE {
     ///   - apiURL: Optional custom API URL (defaults to production)
     ///   - useAppAttest: Enable Apple App Attest for enhanced security (iOS 14+). When enabled, requests are cryptographically signed by the Secure Enclave. Automatically falls back on unsupported devices.
     public func configure(appId: String, apiURL: String = "https://api.cuti-e.com", useAppAttest: Bool = false) {
+        // Enforce HTTPS for security and validate URL format
+        guard let url = URL(string: apiURL), url.scheme?.lowercased() == "https" else {
+            NSLog("[CutiE] ERROR: apiURL must be a valid HTTPS URL. Configuration rejected.")
+            return
+        }
+
         self.configuration = CutiEConfiguration(
             apiKey: nil,
             apiURL: apiURL,
