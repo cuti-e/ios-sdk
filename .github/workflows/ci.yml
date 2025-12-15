@@ -28,7 +28,7 @@ jobs:
         run: |
           xcodebuild build \
             -scheme CutiE \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -destination 'generic/platform=iOS Simulator' \
             -skipPackagePluginValidation
 
       - name: Build for macOS
@@ -53,7 +53,7 @@ jobs:
         run: |
           xcodebuild docbuild \
             -scheme CutiE \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath .build
 
       # Note: Upload disabled - DocC generates filenames with colons (Swift function signatures)
