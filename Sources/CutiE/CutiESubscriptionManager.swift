@@ -226,7 +226,7 @@ public class CutiESubscriptionManager: ObservableObject {
             )
         } catch {
             // Log error but don't fail - subscription still valid locally
-            print("[CutiE] Failed to sync subscription with backend: \(error)")
+            NSLog("[CutiE] Failed to sync subscription with backend: %@", error as NSError)
         }
     }
 }
