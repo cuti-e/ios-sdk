@@ -37,6 +37,56 @@ jobs:
             -scheme CutiE \
             -destination 'platform=macOS'
 
+  test:
+    name: Test with Coverage
+    runs-on: [self-hosted, macOS, ios]
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Run Tests with Coverage
+        run: |
+          xcodebuild test \
+            -scheme CutiE \
+            -destination 'platform=macOS' \
+            -enableCodeCoverage YES \
+            -resultBundlePath TestResults.xcresult \
+            -skipPackagePluginValidation
+
+      - name: Extract Coverage Report
+        run: |
+          # Extract coverage percentage
+          xcrun xccov view --report --only-targets TestResults.xcresult > coverage_report.txt
+          cat coverage_report.txt
+
+          # Extract overall coverage for CutiE target (not CutiETests)
+          COVERAGE=$(xcrun xccov view --report --only-targets TestResults.xcresult | grep -E '^[0-9]+\s+CutiE\s' | awk '{print $(NF-1)}')
+          echo "## Code Coverage: $COVERAGE" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Coverage by File" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          xcrun xccov view --report TestResults.xcresult --files-for-target 'CutiE' >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Check Coverage Threshold
+        run: |
+          # Extract coverage percentage (e.g., "11.31%" -> "11.31")
+          COVERAGE=$(xcrun xccov view --report --only-targets TestResults.xcresult | grep -E '^[0-9]+\s+CutiE\s' | awk '{print $(NF-1)}' | tr -d '%')
+          echo "Coverage: ${COVERAGE}%"
+
+          # Warn if coverage is below 30% (informational, not blocking)
+          if [ -n "$COVERAGE" ]; then
+            COVERAGE_INT=${COVERAGE%.*}
+            if [ "$COVERAGE_INT" -lt 30 ]; then
+              echo "::warning::Code coverage is below 30% (${COVERAGE}%). Consider adding more tests."
+            fi
+          fi
+
   docs:
     name: Build Documentation
     runs-on: [self-hosted, macOS, ios]
