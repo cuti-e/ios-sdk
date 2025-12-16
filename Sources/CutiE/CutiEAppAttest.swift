@@ -4,12 +4,66 @@ import Foundation
 import DeviceCheck
 #endif
 
-/// App Attest manager for cryptographic device verification
-/// Uses Apple's DCAppAttestService to verify requests come from legitimate app installations
+/// Manages Apple App Attest for cryptographic device verification.
+///
+/// `CutiEAppAttest` uses Apple's `DCAppAttestService` to cryptographically verify
+/// that API requests come from legitimate installations of your app on genuine Apple devices.
+/// This provides protection against request tampering and ensures requests originate from
+/// unmodified versions of your app.
+///
+/// ## Overview
+///
+/// App Attest works by generating a unique key pair on the device's Secure Enclave,
+/// then attesting that key with Apple's servers. Once attested, the SDK can generate
+/// signed assertions for API requests.
+///
+/// ## Enabling App Attest
+///
+/// Enable App Attest during SDK configuration:
+///
+/// ```swift
+/// CutiE.shared.configure(
+///     appId: "your_app_id",
+///     useAppAttest: true
+/// )
+/// ```
+///
+/// The SDK automatically handles:
+/// - Key generation on first launch
+/// - Attestation with Apple and your backend
+/// - Assertion generation for protected requests
+/// - Graceful fallback on unsupported devices
+///
+/// ## Device Support
+///
+/// App Attest requires:
+/// - iOS 14.0+ or macOS 11.0+
+/// - A physical device (not supported on simulators)
+/// - Devices with Secure Enclave (iPhone 5s and later)
+///
+/// ## Topics
+///
+/// ### Checking Support
+///
+/// - ``isSupported``
+/// - ``isAttested``
+///
+/// ### Generating Assertions
+///
+/// - ``generateAssertion(for:)``
+///
+/// ### Managing Attestation
+///
+/// - ``reset()``
 @available(iOS 14.0, macOS 11.0, *)
 public class CutiEAppAttest {
 
-    /// Shared singleton instance
+    /// The shared singleton instance.
+    ///
+    /// Access the App Attest manager through this property:
+    /// ```swift
+    /// let appAttest = CutiE.shared.appAttest
+    /// ```
     public static let shared = CutiEAppAttest()
 
     /// Key ID stored in Keychain
@@ -24,10 +78,38 @@ public class CutiEAppAttest {
         }
     }
 
-    /// Whether the device has been attested
+    /// Indicates whether this device has completed attestation.
+    ///
+    /// Returns `true` after the device has successfully completed the attestation flow
+    /// with both Apple and your backend server. Once attested, the device can generate
+    /// signed assertions for API requests.
+    ///
+    /// ```swift
+    /// if CutiE.shared.appAttest.isAttested {
+    ///     // Device is verified, can use enhanced security features
+    /// }
+    /// ```
+    ///
+    /// - Note: This property persists across app launches. Call ``reset()`` to clear
+    ///   attestation state and re-attest the device.
     public private(set) var isAttested: Bool = false
 
-    /// Whether App Attest is supported on this device
+    /// Indicates whether App Attest is supported on this device.
+    ///
+    /// Returns `true` if the device meets all requirements for App Attest:
+    /// - Running iOS 14.0+ or macOS 11.0+
+    /// - Physical device (not a simulator)
+    /// - Has Secure Enclave hardware
+    ///
+    /// ```swift
+    /// if CutiE.shared.appAttest.isSupported {
+    ///     print("App Attest available")
+    /// } else {
+    ///     print("App Attest not supported on this device")
+    /// }
+    /// ```
+    ///
+    /// - Important: Always check this property before attempting attestation-related operations.
     public var isSupported: Bool {
         #if canImport(DeviceCheck)
         return DCAppAttestService.shared.isSupported
@@ -93,10 +175,34 @@ public class CutiEAppAttest {
         #endif
     }
 
-    /// Generate an assertion for a request
-    /// - Parameters:
-    ///   - clientData: The data to sign (typically request body hash)
-    /// - Returns: Base64-encoded assertion
+    /// Generates a cryptographic assertion for API request signing.
+    ///
+    /// Use this method to generate a signed assertion that proves the request
+    /// originates from an attested device. The assertion is generated using
+    /// the device's private key stored in the Secure Enclave.
+    ///
+    /// ```swift
+    /// // Hash the request body
+    /// let bodyData = try JSONEncoder().encode(requestBody)
+    ///
+    /// // Generate assertion
+    /// let assertion = try await CutiE.shared.appAttest.generateAssertion(for: bodyData)
+    ///
+    /// // Include assertion in request header
+    /// request.setValue(assertion, forHTTPHeaderField: "X-App-Assertion")
+    /// ```
+    ///
+    /// - Parameter clientData: The data to sign, typically a hash of the request body.
+    ///   This ensures the assertion is bound to specific request content.
+    ///
+    /// - Returns: A Base64-encoded assertion string suitable for inclusion in HTTP headers.
+    ///
+    /// - Throws: ``AppAttestError/notSupported`` if App Attest is unavailable,
+    ///   ``AppAttestError/notAttested`` if the device hasn't completed attestation,
+    ///   or ``AppAttestError/assertionFailed(_:)`` if assertion generation fails.
+    ///
+    /// - Important: The device must be attested (``isAttested`` is `true`) before
+    ///   calling this method.
     public func generateAssertion(for clientData: Data) async throws -> String {
         #if canImport(DeviceCheck)
         guard isSupported else {
@@ -117,7 +223,25 @@ public class CutiEAppAttest {
         #endif
     }
 
-    /// Reset attestation (for testing or re-attestation)
+    /// Resets attestation state to allow re-attestation.
+    ///
+    /// Call this method to clear the stored attestation key and allow the device
+    /// to go through the attestation flow again. This is useful for:
+    /// - Testing attestation in development
+    /// - Recovering from attestation errors
+    /// - Forcing re-attestation after backend key revocation
+    ///
+    /// ```swift
+    /// // Clear attestation and re-attest
+    /// CutiE.shared.appAttest.reset()
+    ///
+    /// // Attestation will happen automatically on next API call
+    /// // if useAppAttest was enabled during configuration
+    /// ```
+    ///
+    /// - Warning: After calling reset, the device will need to complete the full
+    ///   attestation flow again, which requires network connectivity and may take
+    ///   a few seconds.
     public func reset() {
         keyId = nil
         isAttested = false

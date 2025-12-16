@@ -1,26 +1,131 @@
 import Foundation
 import StoreKit
 
-/// Manages subscription status and purchases using StoreKit 2
+/// Manages in-app subscription purchases and status using StoreKit 2.
+///
+/// `CutiESubscriptionManager` provides a complete subscription management solution
+/// including product loading, purchase handling, receipt validation, and status tracking.
+/// It automatically syncs subscription state with your Cuti-E backend.
+///
+/// ## Overview
+///
+/// The subscription manager is an `ObservableObject` that publishes subscription state
+/// changes, making it easy to integrate with SwiftUI views.
+///
+/// ## Usage
+///
+/// Access the manager through the main SDK instance:
+///
+/// ```swift
+/// let subscriptionManager = CutiE.shared.subscriptionManager
+///
+/// // Check current tier
+/// switch subscriptionManager.currentTier {
+/// case .free:
+///     showUpgradePrompt()
+/// case .starter, .pro, .business:
+///     enablePremiumFeatures()
+/// }
+/// ```
+///
+/// ### Displaying Available Plans
+///
+/// ```swift
+/// struct SubscriptionView: View {
+///     @ObservedObject var manager = CutiE.shared.subscriptionManager
+///
+///     var body: some View {
+///         List(manager.products, id: \.id) { product in
+///             Button(product.displayName) {
+///                 Task {
+///                     await manager.purchase(product)
+///                 }
+///             }
+///         }
+///     }
+/// }
+/// ```
+///
+/// ## Topics
+///
+/// ### Subscription State
+///
+/// - ``currentTier``
+/// - ``subscriptionStatus``
+/// - ``SubscriptionTier``
+/// - ``SubscriptionStatus``
+///
+/// ### Products
+///
+/// - ``products``
+/// - ``isLoading``
+/// - ``loadProducts()``
+///
+/// ### Purchasing
+///
+/// - ``purchase(_:)``
+/// - ``restorePurchases()``
 @available(iOS 15.0, macOS 12.0, *)
 public class CutiESubscriptionManager: ObservableObject {
 
-    /// Shared singleton instance
+    /// The shared singleton instance.
+    ///
+    /// Access through `CutiE.shared.subscriptionManager` for proper SDK integration.
     public static let shared = CutiESubscriptionManager()
 
-    /// Current subscription tier
+    /// The user's current subscription tier.
+    ///
+    /// This property reflects the highest active subscription tier. It updates
+    /// automatically when subscriptions are purchased, renewed, or expire.
+    ///
+    /// ```swift
+    /// if CutiE.shared.subscriptionManager.currentTier >= .pro {
+    ///     // Enable Pro features
+    /// }
+    /// ```
     @Published public private(set) var currentTier: SubscriptionTier = .free
 
-    /// Current subscription status
+    /// The current subscription status.
+    ///
+    /// Indicates whether the user has an active subscription and when it expires.
+    ///
+    /// ```swift
+    /// switch subscriptionManager.subscriptionStatus {
+    /// case .active(let expiresAt):
+    ///     if let date = expiresAt {
+    ///         print("Subscription expires: \(date)")
+    ///     }
+    /// case .expired:
+    ///     showRenewalPrompt()
+    /// case .none:
+    ///     showSubscriptionOptions()
+    /// case .gracePeriod(let expiresAt):
+    ///     showGracePeriodWarning(until: expiresAt)
+    /// }
+    /// ```
     @Published public private(set) var subscriptionStatus: SubscriptionStatus = .none
 
-    /// Available products for purchase
+    /// Available subscription products from the App Store.
+    ///
+    /// This array is populated after calling ``loadProducts()``. Products are
+    /// sorted by tier (Starter, Pro, Business) and billing period (monthly first).
     @Published public private(set) var products: [Product] = []
 
-    /// Whether products are being loaded
+    /// Indicates whether products are currently being loaded.
+    ///
+    /// Use this to show loading indicators in your UI:
+    /// ```swift
+    /// if manager.isLoading {
+    ///     ProgressView()
+    /// } else {
+    ///     ProductList(products: manager.products)
+    /// }
+    /// ```
     @Published public private(set) var isLoading = false
 
-    /// Error message if any
+    /// Error message from the last failed operation, if any.
+    ///
+    /// Check this after purchase or restore operations to display error feedback.
     @Published public private(set) var errorMessage: String?
 
     /// Product IDs for subscriptions
@@ -49,7 +154,21 @@ public class CutiESubscriptionManager: ObservableObject {
 
     // MARK: - Public Methods
 
-    /// Load available products from App Store
+    /// Loads available subscription products from the App Store.
+    ///
+    /// Call this method to fetch the latest product information. Products are
+    /// automatically sorted by tier and billing period.
+    ///
+    /// ```swift
+    /// await CutiE.shared.subscriptionManager.loadProducts()
+    ///
+    /// for product in manager.products {
+    ///     print("\(product.displayName): \(product.displayPrice)")
+    /// }
+    /// ```
+    ///
+    /// - Note: Products are loaded automatically when the manager initializes.
+    ///   Call this method to refresh product data or retry after a failure.
     @MainActor
     public func loadProducts() async {
         isLoading = true
@@ -75,9 +194,29 @@ public class CutiESubscriptionManager: ObservableObject {
         }
     }
 
-    /// Purchase a subscription product
-    /// - Parameter product: The product to purchase
-    /// - Returns: True if purchase was successful
+    /// Initiates a purchase for the specified subscription product.
+    ///
+    /// This method handles the complete purchase flow including:
+    /// - Presenting the App Store purchase UI
+    /// - Verifying the transaction
+    /// - Updating local subscription state
+    /// - Syncing with your Cuti-E backend
+    ///
+    /// ```swift
+    /// if let product = manager.products.first {
+    ///     let success = await manager.purchase(product)
+    ///     if success {
+    ///         print("Purchase successful!")
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// - Parameter product: The `Product` to purchase from ``products``.
+    ///
+    /// - Returns: `true` if the purchase completed successfully, `false` if the user
+    ///   cancelled, the transaction is pending, or an error occurred.
+    ///
+    /// - Note: Check ``errorMessage`` for details if the purchase fails.
     @MainActor
     public func purchase(_ product: Product) async -> Bool {
         do {
@@ -114,7 +253,21 @@ public class CutiESubscriptionManager: ObservableObject {
         }
     }
 
-    /// Restore purchases
+    /// Restores previously purchased subscriptions.
+    ///
+    /// Call this method when users want to restore purchases, typically from a
+    /// "Restore Purchases" button in your subscription UI. This syncs with the
+    /// App Store to restore any active subscriptions.
+    ///
+    /// ```swift
+    /// Button("Restore Purchases") {
+    ///     Task {
+    ///         await manager.restorePurchases()
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// - Note: Check ``errorMessage`` for details if the restore fails.
     @MainActor
     public func restorePurchases() async {
         do {
@@ -125,7 +278,17 @@ public class CutiESubscriptionManager: ObservableObject {
         }
     }
 
-    /// Update subscription status from App Store
+    /// Refreshes subscription status from the App Store.
+    ///
+    /// This method queries the App Store for current entitlements and updates
+    /// ``currentTier`` and ``subscriptionStatus`` accordingly. It's called
+    /// automatically after purchases and restores.
+    ///
+    /// ```swift
+    /// // Manually refresh subscription status
+    /// await manager.updateSubscriptionStatus()
+    /// print("Current tier: \(manager.currentTier)")
+    /// ```
     @MainActor
     public func updateSubscriptionStatus() async {
         var highestTier: SubscriptionTier = .free
@@ -233,11 +396,22 @@ public class CutiESubscriptionManager: ObservableObject {
 
 // MARK: - Supporting Types
 
-/// Subscription tiers
+/// Subscription tier levels for Cuti-E services.
+///
+/// Tiers are ordered by feature level, allowing comparison:
+/// ```swift
+/// if currentTier >= .pro {
+///     enableAdvancedFeatures()
+/// }
+/// ```
 public enum SubscriptionTier: Int, Comparable, Codable {
+    /// Free tier with basic features.
     case free = 0
+    /// Starter tier for small projects.
     case starter = 1
+    /// Pro tier for growing teams.
     case pro = 2
+    /// Business tier for enterprise needs.
     case business = 3
 
     public static func < (lhs: SubscriptionTier, rhs: SubscriptionTier) -> Bool {
@@ -263,11 +437,15 @@ public enum SubscriptionTier: Int, Comparable, Codable {
     }
 }
 
-/// Subscription status
+/// Current status of the user's subscription.
 public enum SubscriptionStatus: Equatable {
+    /// No active subscription.
     case none
+    /// Active subscription with optional expiration date.
     case active(expiresAt: Date?)
+    /// Subscription has expired.
     case expired
+    /// Subscription is in grace period (payment failed but access continues).
     case gracePeriod(expiresAt: Date)
 }
 
