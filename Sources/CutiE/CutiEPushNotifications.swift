@@ -133,12 +133,49 @@ public class CutiEPushNotifications: NSObject {
 
     /// Register a device token (hex string format) with the CutiE backend
     /// - Parameter token: The device token as a hex string
-    public func registerToken(_ token: String) {
+    /// - Returns: Result indicating success or validation error
+    @discardableResult
+    public func registerToken(_ token: String) -> Result<Void, CutiEError> {
+        // Validate token before storing/registering
+        if let error = validatePushToken(token) {
+            NSLog("[CutiE] Invalid push token: \(error.localizedDescription)")
+            return .failure(error)
+        }
+
         self.deviceToken = token
         NSLog("[CutiE] Received device token: \(token.prefix(16))...")
 
         // Register with backend
         registerTokenWithBackend()
+        return .success(())
+    }
+
+    /// Validate a push notification token
+    /// - Parameter token: The token to validate
+    /// - Returns: Error if invalid, nil if valid
+    public func validatePushToken(_ token: String) -> CutiEError? {
+        // Check for empty token
+        guard !token.isEmpty else {
+            return .invalidPushToken("Token cannot be empty")
+        }
+
+        // Check minimum length (APNs tokens are typically 64 hex chars = 32 bytes)
+        guard token.count >= 32 else {
+            return .invalidPushToken("Token too short (minimum 32 characters)")
+        }
+
+        // Check maximum length (allow for future expansion, but reject absurdly long values)
+        guard token.count <= 200 else {
+            return .invalidPushToken("Token too long (maximum 200 characters)")
+        }
+
+        // Validate hex format (only 0-9, a-f, A-F allowed)
+        let hexCharacterSet = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
+        guard token.unicodeScalars.allSatisfy({ hexCharacterSet.contains($0) }) else {
+            return .invalidPushToken("Token must contain only hexadecimal characters (0-9, a-f)")
+        }
+
+        return nil
     }
 
     /// Call this from your AppDelegate's `application(_:didFailToRegisterForRemoteNotificationsWithError:)`
