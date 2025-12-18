@@ -246,9 +246,11 @@ public class CutiE {
     /// Register a push notification device token (hex string format)
     /// Call this from your AppDelegate after receiving the device token
     /// - Parameter deviceToken: The device token as a hex string
+    /// - Returns: Result indicating success or validation error
     @available(iOS 10.0, macOS 10.14, *)
-    public func registerForPushNotifications(deviceToken: String) {
-        pushNotifications.registerToken(deviceToken)
+    @discardableResult
+    public func registerForPushNotifications(deviceToken: String) -> Result<Void, CutiEError> {
+        return pushNotifications.registerToken(deviceToken)
     }
 
     #if os(iOS)
@@ -320,6 +322,7 @@ public enum CutiEError: LocalizedError {
     case serverError(Int, String)
     case decodingError(String? = nil)
     case invalidRequest
+    case invalidPushToken(String)
 
     public var errorDescription: String? {
         switch self {
@@ -338,6 +341,8 @@ public enum CutiEError: LocalizedError {
             return "Failed to decode server response"
         case .invalidRequest:
             return "Invalid request"
+        case .invalidPushToken(let reason):
+            return "Invalid push token: \(reason)"
         }
     }
 }
