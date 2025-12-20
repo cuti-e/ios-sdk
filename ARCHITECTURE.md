@@ -4,7 +4,7 @@ This document describes the architecture of the Cuti-E iOS SDK using C4 diagrams
 
 ## C4 Model Overview
 
-The C4 model provides four levels of abstraction:
+This document uses three levels of the C4 model:
 1. **Context** - System landscape and external dependencies
 2. **Container** - High-level technology choices
 3. **Component** - Internal structure of containers
@@ -395,7 +395,7 @@ graph LR
 | Component | Minimum iOS | Minimum macOS | Notes |
 |-----------|-------------|---------------|-------|
 | Core SDK | 15.0 | 12.0 | Base functionality |
-| Push Notifications | 10.0 | 10.14 | `UserNotifications` |
+| Push Notifications | 15.0 | 12.0 | `UserNotifications` |
 | App Attest | 14.0 | 11.0 | `DeviceCheck` |
 | Async/Await APIs | 15.0 | 12.0 | Swift concurrency |
 | SwiftUI Views | 15.0 | 12.0 | `CutiEInboxView`, etc. |
