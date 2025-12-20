@@ -15,6 +15,10 @@ Character-driven feedback platform for iOS apps. Make customer support delightfu
 - 🔐 **App Attest** - Enhanced device verification using Apple's secure enclave (iOS 14+)
 - 📲 **Device Linking** - Share conversation inbox across multiple devices via QR code
 
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for C4 diagrams showing the SDK structure, component relationships, and data flows.
+
 ## Installation
 
 ### Swift Package Manager
