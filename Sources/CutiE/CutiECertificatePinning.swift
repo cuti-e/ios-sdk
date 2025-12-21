@@ -8,6 +8,27 @@ internal final class CutiECertificatePinning: NSObject {
 
     static let shared = CutiECertificatePinning()
 
+    // MARK: - Expiry Monitoring
+
+    /// Certificate pin expiry date: June 22, 2036 00:00:00 UTC
+    /// This is when the Google Trust Services root CAs expire
+    private static let pinExpiryDate: Date = {
+        var components = DateComponents()
+        components.year = 2036
+        components.month = 6
+        components.day = 22
+        components.hour = 0
+        components.minute = 0
+        components.second = 0
+        components.timeZone = TimeZone(identifier: "UTC")
+        return Calendar(identifier: .gregorian).date(from: components) ?? Date.distantFuture
+    }()
+
+    /// Number of days before expiry to start warning (1 year)
+    private static let expiryWarningThresholdDays: Int = 365
+
+    // MARK: - Certificate Pins
+
     /// SPKI SHA-256 hashes for Google Trust Services Root CAs
     /// These are stable root certificates that won't rotate with Cloudflare's leaf certs
     /// All expire: June 22, 2036
@@ -33,6 +54,33 @@ internal final class CutiECertificatePinning: NSObject {
 
     private override init() {
         super.init()
+        Self.checkPinExpiry()
+    }
+
+    // MARK: - Expiry Check
+
+    /// Check if certificate pins are approaching expiry and log a warning
+    /// Called automatically on initialization and can be called manually
+    static func checkPinExpiry() {
+        let now = Date()
+        let calendar = Calendar(identifier: .gregorian)
+
+        guard let daysUntilExpiry = calendar.dateComponents([.day], from: now, to: pinExpiryDate).day else {
+            return
+        }
+
+        if daysUntilExpiry < 0 {
+            NSLog("[CutiE] CRITICAL: Certificate pins have EXPIRED! Update the SDK immediately.")
+        } else if daysUntilExpiry < expiryWarningThresholdDays {
+            NSLog("[CutiE] WARNING: Certificate pins expire in %d days (June 22, 2036). Plan SDK update.", daysUntilExpiry)
+        }
+    }
+
+    /// Returns the number of days until certificate pins expire
+    /// Useful for monitoring and alerting
+    static func daysUntilPinExpiry() -> Int {
+        let calendar = Calendar(identifier: .gregorian)
+        return calendar.dateComponents([.day], from: Date(), to: pinExpiryDate).day ?? 0
     }
 
     /// Create a URLSession with certificate pinning enabled
