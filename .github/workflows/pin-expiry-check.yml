@@ -8,7 +8,7 @@ on:
 
 jobs:
   check-expiry:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ios]
     steps:
       - uses: actions/checkout@v4
 
@@ -17,7 +17,8 @@ jobs:
         run: |
           # Certificate pins expire June 22, 2036
           EXPIRY_DATE="2036-06-22"
-          EXPIRY_EPOCH=$(date -d "$EXPIRY_DATE" +%s)
+          # macOS BSD date syntax
+          EXPIRY_EPOCH=$(date -j -f "%Y-%m-%d" "$EXPIRY_DATE" +%s)
           NOW_EPOCH=$(date +%s)
           DAYS_UNTIL=$(( (EXPIRY_EPOCH - NOW_EPOCH) / 86400 ))
 
