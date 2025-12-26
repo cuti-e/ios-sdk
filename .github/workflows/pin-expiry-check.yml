@@ -92,3 +92,4 @@ This issue was automatically created by the monthly certificate expiry check.`,
                 labels: ['security', 'certificate-pinning', 'urgent']
               });
             }
+
