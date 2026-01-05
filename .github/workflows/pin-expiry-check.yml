@@ -10,7 +10,7 @@ jobs:
   check-expiry:
     runs-on: [self-hosted, macOS, ios]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Check certificate pin expiry
         id: expiry-check
