@@ -5,6 +5,13 @@ All notable changes to the CutiE iOS SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1](https://github.com/cuti-e/ios-sdk/compare/1.1.0...1.1.1) (2026-02-14)
+
+
+### Bug Fixes
+
+* **release:** Sync sdkVersion with release-please manifest ([#59](https://github.com/cuti-e/ios-sdk/issues/59)) ([53cde7b](https://github.com/cuti-e/ios-sdk/commit/53cde7b363fccdf7c5cf03109f23fae19b3b2800)), closes [#55](https://github.com/cuti-e/ios-sdk/issues/55)
+
 ## [1.1.0](https://github.com/cuti-e/ios-sdk/compare/1.0.104...1.1.0) (2026-02-14)
 
 
