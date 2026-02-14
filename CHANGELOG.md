@@ -5,6 +5,25 @@ All notable changes to the CutiE iOS SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0](https://github.com/cuti-e/ios-sdk/compare/1.0.104...1.1.0) (2026-02-14)
+
+
+### Features
+
+* Add certificate pinning expiry monitoring ([#45](https://github.com/cuti-e/ios-sdk/issues/45)) ([c798eea](https://github.com/cuti-e/ios-sdk/commit/c798eea3cf336ff3d43d419a98ee90470ace47b5))
+* Add SDK version header to all API requests ([#53](https://github.com/cuti-e/ios-sdk/issues/53)) ([7ea427c](https://github.com/cuti-e/ios-sdk/commit/7ea427c621e3072948557463b3e13c1134e65397))
+
+
+### Bug Fixes
+
+* Add HTTPS enforcement in configure() ([#36](https://github.com/cuti-e/ios-sdk/issues/36)) ([0160d5f](https://github.com/cuti-e/ios-sdk/commit/0160d5f7a7bf39b48acd8112fdecee78b984f761))
+* **ci:** Add checks:read permission to auto-merge workflow ([#22](https://github.com/cuti-e/ios-sdk/issues/22)) ([723b7c8](https://github.com/cuti-e/ios-sdk/commit/723b7c857fdb2df28a17944caff0b47db0021b00))
+* **ci:** Use generic simulator destination ([#35](https://github.com/cuti-e/ios-sdk/issues/35)) ([4467e23](https://github.com/cuti-e/ios-sdk/commit/4467e236614c02a464f65aaba11df87ef60fd1fd))
+* **ci:** use macOS runner for release-please workflow ([#54](https://github.com/cuti-e/ios-sdk/issues/54)) ([67f456a](https://github.com/cuti-e/ios-sdk/commit/67f456a905024582b51edf824de76f8e8f737ba3))
+* Replace print() with NSLog for consistent logging ([#33](https://github.com/cuti-e/ios-sdk/issues/33)) ([17e1f48](https://github.com/cuti-e/ios-sdk/commit/17e1f48387a381e10773f42f5113dfdc1c6dfa2b))
+* Simplify pin-expiry-check workflow for Dependabot compatibility ([#48](https://github.com/cuti-e/ios-sdk/issues/48)) ([b7f4617](https://github.com/cuti-e/ios-sdk/commit/b7f461787c455c85e8f22fa53e015ee9329f42b2))
+* Use self-hosted macOS runner for pin-expiry-check workflow ([#46](https://github.com/cuti-e/ios-sdk/issues/46)) ([07523ed](https://github.com/cuti-e/ios-sdk/commit/07523eddfa00fc18b2d7e69b95ca5b312a1ec3f9))
+
 ## [1.0.104] - 2025-12-15
 
 ### Changed
