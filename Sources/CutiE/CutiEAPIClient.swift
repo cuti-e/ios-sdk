@@ -32,6 +32,12 @@ internal class CutiEAPIClient {
         self.session = CutiECertificatePinning.shared.createPinnedSession(configuration: config)
     }
 
+    /// Internal initializer for testing with a custom URLSession
+    init(configuration: CutiEConfiguration, session: URLSession) {
+        self.configuration = configuration
+        self.session = session
+    }
+
     // MARK: - Keychain Storage for Device Token
 
     private let deviceTokenKeychainKey = "com.cutie.deviceToken"

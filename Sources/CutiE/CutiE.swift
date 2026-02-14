@@ -8,8 +8,8 @@ import UIKit
 /// Main Cuti-E SDK class
 public class CutiE {
 
-    /// SDK version (matches git tag)
-    internal static let sdkVersion = "1.0.104"
+    /// SDK version (matches git tag, updated by release-please)
+    internal static let sdkVersion = "1.1.0" // x-release-please-version
 
     /// Shared singleton instance
     public static let shared = CutiE()

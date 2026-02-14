@@ -148,6 +148,48 @@ final class CutiEAPIIntegrationTests: XCTestCase {
     // testListConversations: Removed - listConversations method not implemented in v1.0.63 minimal SDK
 }
 
+// MARK: - Mock URL Protocol for Request Interception
+
+private class MockURLProtocol: URLProtocol {
+    static var capturedRequests: [URLRequest] = []
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        capturedRequests.append(request)
+        return true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        return request
+    }
+
+    override func startLoading() {
+        // Return a mock JSON response for any request
+        let responseJSON: [String: Any]
+        if request.url?.path.contains("device/register") == true {
+            responseJSON = [
+                "device_token": "mock_token_123",
+                "token_id": "tid_123",
+                "is_new": true
+            ]
+        } else {
+            responseJSON = ["conversations": [], "total_unread": 0]
+        }
+
+        let data = try! JSONSerialization.data(withJSONObject: responseJSON)
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
 // MARK: - SDK Version Header Tests
 
 final class SDKVersionHeaderTests: XCTestCase {
@@ -224,5 +266,49 @@ final class SDKVersionHeaderTests: XCTestCase {
             request.value(forHTTPHeaderField: "x-cutie-sdk-version"),
             "HTTP headers should be case-insensitive"
         )
+    }
+
+    func testAPIClientAttachesSDKVersionHeader() {
+        // Verify that CutiEAPIClient actually attaches the X-CutiE-SDK-Version
+        // header to outgoing requests (not just that it CAN be set)
+
+        // Given - set up mock URL protocol to intercept requests
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [MockURLProtocol.self]
+        let mockSession = URLSession(configuration: sessionConfig)
+        MockURLProtocol.capturedRequests = []
+
+        let config = CutiEConfiguration(
+            apiKey: "test_key",
+            apiURL: "https://api.test.com",
+            deviceID: "device_test_456",
+            appId: "app_test789"
+        )
+        let client = CutiEAPIClient(configuration: config, session: mockSession)
+
+        // When - trigger an API request
+        let expectation = XCTestExpectation(description: "API request completed")
+        client.listConversations { _ in
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 5.0)
+
+        // Then - verify all outgoing requests include the SDK version header
+        XCTAssertGreaterThan(
+            MockURLProtocol.capturedRequests.count, 0,
+            "At least one request should have been made"
+        )
+
+        for request in MockURLProtocol.capturedRequests {
+            let sdkVersionHeader = request.value(forHTTPHeaderField: "X-CutiE-SDK-Version")
+            XCTAssertNotNil(
+                sdkVersionHeader,
+                "Request to \(request.url?.path ?? "unknown") should include X-CutiE-SDK-Version header"
+            )
+            XCTAssertEqual(
+                sdkVersionHeader, CutiE.sdkVersion,
+                "X-CutiE-SDK-Version header should match CutiE.sdkVersion"
+            )
+        }
     }
 }
