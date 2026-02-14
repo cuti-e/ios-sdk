@@ -91,6 +91,7 @@ internal class CutiEAPIClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(CutiE.sdkVersion, forHTTPHeaderField: "X-CutiE-SDK-Version")
         request.setValue(configuration.appId, forHTTPHeaderField: "X-App-ID")
         request.setValue(configuration.deviceID, forHTTPHeaderField: "X-Device-ID")
         // Include API key if available (deprecated, for backwards compatibility)
@@ -688,6 +689,7 @@ internal class CutiEAPIClient {
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(CutiE.sdkVersion, forHTTPHeaderField: "X-CutiE-SDK-Version")
 
         // Use device token if available (preferred)
         if let token = deviceToken {
