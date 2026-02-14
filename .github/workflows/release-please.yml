@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release-please:
-    runs-on: [self-hosted, Linux]
+    runs-on: [self-hosted, macOS, ios]
     steps:
       - uses: googleapis/release-please-action@v4
         with:
