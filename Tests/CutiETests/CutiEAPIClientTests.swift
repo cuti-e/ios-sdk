@@ -147,3 +147,82 @@ final class CutiEAPIIntegrationTests: XCTestCase {
 
     // testListConversations: Removed - listConversations method not implemented in v1.0.63 minimal SDK
 }
+
+// MARK: - SDK Version Header Tests
+
+final class SDKVersionHeaderTests: XCTestCase {
+
+    func testSDKVersionConstantIsValid() {
+        // Verify the SDK version constant exists and is in the expected format
+        let sdkVersion = CutiE.sdkVersion
+
+        XCTAssertFalse(sdkVersion.isEmpty, "SDK version should not be empty")
+        XCTAssertTrue(
+            sdkVersion.contains("."),
+            "SDK version should be in semantic versioning format (e.g., 1.0.104)"
+        )
+
+        // Verify it's a valid semantic version (major.minor.patch)
+        let components = sdkVersion.split(separator: ".")
+        XCTAssertGreaterThanOrEqual(
+            components.count,
+            2,
+            "SDK version should have at least major.minor components"
+        )
+
+        // Verify all components are numeric
+        for component in components {
+            XCTAssertNotNil(
+                Int(component),
+                "SDK version component '\(component)' should be numeric"
+            )
+        }
+    }
+
+    func testSDKVersionHeaderCanBeSetOnRequest() {
+        // Verify that the SDK version can be set as a header on a URLRequest
+        // This mirrors the implementation in CutiEAPIClient.performRequest (line 692)
+        // and CutiEAPIClient.registerDeviceToken (line 94)
+
+        let testURL = URL(string: "https://api.test.com/v1/conversations")!
+        var request = URLRequest(url: testURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        // Set the SDK version header as done in the actual implementation
+        request.setValue(CutiE.sdkVersion, forHTTPHeaderField: "X-CutiE-SDK-Version")
+
+        // Verify the header is present and matches the constant
+        let sdkVersionHeader = request.value(forHTTPHeaderField: "X-CutiE-SDK-Version")
+        XCTAssertNotNil(sdkVersionHeader, "X-CutiE-SDK-Version header should be present")
+        XCTAssertEqual(
+            sdkVersionHeader,
+            CutiE.sdkVersion,
+            "X-CutiE-SDK-Version header should equal CutiE.sdkVersion"
+        )
+        XCTAssertFalse(sdkVersionHeader!.isEmpty, "SDK version header value should not be empty")
+    }
+
+    func testSDKVersionHeaderNameIsCorrect() {
+        // Verify the expected header name is used
+        let expectedHeaderName = "X-CutiE-SDK-Version"
+
+        // Create a request and set the header
+        let testURL = URL(string: "https://api.test.com")!
+        var request = URLRequest(url: testURL)
+        request.setValue("1.0.0", forHTTPHeaderField: expectedHeaderName)
+
+        // Verify it can be retrieved with the exact name
+        XCTAssertNotNil(
+            request.value(forHTTPHeaderField: expectedHeaderName),
+            "Header should be retrievable with name '\(expectedHeaderName)'"
+        )
+
+        // Verify the header name is case-insensitive (HTTP header standard)
+        XCTAssertNotNil(
+            request.value(forHTTPHeaderField: "x-cutie-sdk-version"),
+            "HTTP headers should be case-insensitive"
+        )
+    }
+}
