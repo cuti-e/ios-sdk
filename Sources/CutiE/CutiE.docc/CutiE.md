@@ -4,7 +4,7 @@ The official iOS SDK for integrating Cuti-E feedback and support into your app.
 
 ## Overview
 
-CutiE SDK provides a complete solution for collecting user feedback, managing support conversations, and handling in-app subscriptions. The SDK offers both completion handler and async/await APIs for flexibility.
+CutiE SDK provides a complete solution for collecting user feedback and managing support conversations. The SDK offers both completion handler and async/await APIs for flexibility.
 
 ### Getting Started
 
@@ -58,12 +58,6 @@ if #available(iOS 15.0, *) {
 - ``Conversation``
 - ``ConversationCategory``
 - ``Message``
-
-### Subscriptions
-
-- ``CutiESubscriptionManager``
-- ``SubscriptionTier``
-- ``SubscriptionStatus``
 
 ### Security
 

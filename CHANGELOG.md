@@ -85,7 +85,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Push notification support
 - App Attest integration
 - Certificate pinning
-- Subscription management with StoreKit 2
 
 [1.0.104]: https://github.com/cuti-e/ios-sdk/compare/1.0.103...1.0.104
 [1.0.103]: https://github.com/cuti-e/ios-sdk/compare/1.0.102...1.0.103

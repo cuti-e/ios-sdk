@@ -20,12 +20,6 @@ public class CutiE {
     /// API client
     internal var apiClient: CutiEAPIClient?
 
-    /// Subscription manager (iOS 15+)
-    @available(iOS 15.0, macOS 12.0, *)
-    public var subscriptionManager: CutiESubscriptionManager {
-        return CutiESubscriptionManager.shared
-    }
-
     /// App Attest manager for cryptographic device verification (iOS 14+)
     @available(iOS 14.0, macOS 11.0, *)
     public var appAttest: CutiEAppAttest {
