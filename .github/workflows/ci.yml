@@ -106,5 +106,5 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath .build
 
-      # Note: Upload disabled - DocC generates filenames with colons (Swift function signatures)
-      # which are invalid on Windows/NTFS and rejected by actions/upload-artifact
+      # Deployment handled by deploy-docs.yml (uses actions/upload-pages-artifact
+      # which creates tar archives, bypassing the colon-in-filename issue)

@@ -1,0 +1,55 @@
+name: Deploy Documentation
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy DocC to GitHub Pages
+    runs-on: [self-hosted, macOS, ios]
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build DocC Documentation
+        run: |
+          xcodebuild docbuild \
+            -scheme CutiE \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath .build \
+            -skipPackagePluginValidation
+
+      - name: Transform for Static Hosting
+        run: |
+          ARCHIVE=$(find .build -name "*.doccarchive" -type d | head -1)
+          echo "Found archive: $ARCHIVE"
+
+          $(xcrun --find docc) process-archive transform-for-static-hosting \
+            "$ARCHIVE" \
+            --hosting-base-path ios-sdk \
+            --output-path docs
+
+          echo "Generated $(find docs -type f | wc -l | tr -d ' ') files"
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
