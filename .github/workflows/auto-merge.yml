@@ -13,6 +13,7 @@ jobs:
     permissions:
       pull-requests: write
       contents: write
+      actions: write
       checks: read
 
     steps:
@@ -88,3 +89,34 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           pull-request-number: ${{ steps.get-pr.outputs.pr_number }}
           merge-method: squash
+
+      - name: Trigger release-please after merge
+        if: success()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr_number = ${{ steps.get-pr.outputs.pr_number }};
+
+            // Wait for auto-merge to complete
+            await new Promise(resolve => setTimeout(resolve, 10000));
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr_number
+            });
+
+            if (!pr.merged) {
+              console.log('PR not yet merged, skipping release-please trigger');
+              return;
+            }
+
+            // GITHUB_TOKEN merges don't trigger push events, so dispatch manually
+            console.log('PR merged, triggering release-please...');
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'release-please.yml',
+              ref: 'main'
+            });
+            console.log('Release-please workflow triggered');
