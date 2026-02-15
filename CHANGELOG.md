@@ -5,6 +5,23 @@ All notable changes to the CutiE iOS SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0](https://github.com/cuti-e/ios-sdk/compare/1.1.1...2.0.0) (2026-02-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove CutiESubscriptionManager from SDK ([#69](https://github.com/cuti-e/ios-sdk/issues/69))
+
+### Bug Fixes
+
+* **ci:** install GNU tar for macOS Pages deployment ([#66](https://github.com/cuti-e/ios-sdk/issues/66)) ([7cb4965](https://github.com/cuti-e/ios-sdk/commit/7cb4965278907ddffd7e663b28288f23d8da7125))
+* **ci:** trigger release-please after auto-merge ([#67](https://github.com/cuti-e/ios-sdk/issues/67)) ([5aadfb3](https://github.com/cuti-e/ios-sdk/commit/5aadfb3746a7e54605323d3212d7284a64fcf190))
+
+
+### Code Refactoring
+
+* remove CutiESubscriptionManager from SDK ([#69](https://github.com/cuti-e/ios-sdk/issues/69)) ([379f3e2](https://github.com/cuti-e/ios-sdk/commit/379f3e24c0a0e4502a0ff6a8ddc5ea3a75436c24))
+
 ## [1.1.1](https://github.com/cuti-e/ios-sdk/compare/1.1.0...1.1.1) (2026-02-14)
 
 
