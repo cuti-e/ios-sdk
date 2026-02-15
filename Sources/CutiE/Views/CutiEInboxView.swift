@@ -4,10 +4,14 @@ import SwiftUI
 /// In-app inbox view showing user's feedback conversations
 @available(iOS 15.0, *)
 public struct CutiEInboxView: View {
-    @StateObject private var viewModel = InboxViewModel()
+    @StateObject private var viewModel: InboxViewModel
     @Environment(\.dismiss) private var dismiss
 
-    public init() {}
+    /// Create an inbox view, optionally navigating directly to a conversation
+    /// - Parameter conversationId: If provided, automatically navigates to this conversation on appear
+    public init(conversationId: String? = nil) {
+        self._viewModel = StateObject(wrappedValue: InboxViewModel(initialConversationId: conversationId))
+    }
 
     public var body: some View {
         NavigationView {
@@ -37,6 +41,22 @@ public struct CutiEInboxView: View {
                     .disabled(viewModel.isLoading)
                 }
             }
+            .background(
+                NavigationLink(
+                    isActive: $viewModel.isNavigatingToTarget,
+                    destination: {
+                        if let conversation = viewModel.navigationTarget {
+                            CutiEConversationView(conversation: conversation)
+                                .onDisappear {
+                                    viewModel.navigationTarget = nil
+                                    Task { await viewModel.loadConversations() }
+                                }
+                        }
+                    },
+                    label: { EmptyView() }
+                )
+                .hidden()
+            )
             .alert("Error", isPresented: .init(
                 get: { viewModel.errorMessage != nil },
                 set: { if !$0 { viewModel.errorMessage = nil } }
@@ -203,6 +223,14 @@ private class InboxViewModel: ObservableObject {
     @Published var conversations: [Conversation] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var isNavigatingToTarget = false
+    @Published var navigationTarget: Conversation?
+
+    private var initialConversationId: String?
+
+    init(initialConversationId: String? = nil) {
+        self.initialConversationId = initialConversationId
+    }
 
     func loadConversations() async {
         isLoading = true
@@ -210,6 +238,14 @@ private class InboxViewModel: ObservableObject {
 
         do {
             conversations = try await CutiE.shared.getConversations()
+
+            // Auto-navigate to target conversation if specified
+            if let targetId = initialConversationId,
+               let target = conversations.first(where: { $0.id == targetId }) {
+                initialConversationId = nil
+                navigationTarget = target
+                isNavigatingToTarget = true
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

@@ -8,9 +8,16 @@ public struct CutiEConversationView: View {
     @StateObject private var viewModel: ConversationViewModel
     @FocusState private var isInputFocused: Bool
 
-    public init(conversation: Conversation) {
+    /// Create a conversation view, optionally scrolling to a specific message
+    /// - Parameters:
+    ///   - conversation: The conversation to display
+    ///   - targetMessageId: If provided, scrolls to this message after loading (instead of the last message)
+    public init(conversation: Conversation, targetMessageId: String? = nil) {
         self.conversation = conversation
-        self._viewModel = StateObject(wrappedValue: ConversationViewModel(conversationId: conversation.id))
+        self._viewModel = StateObject(wrappedValue: ConversationViewModel(
+            conversationId: conversation.id,
+            targetMessageId: targetMessageId
+        ))
     }
 
     public var body: some View {
@@ -27,7 +34,12 @@ public struct CutiEConversationView: View {
                     .padding()
                 }
                 .onChange(of: viewModel.messages.count) { _ in
-                    if let lastMessage = viewModel.messages.last {
+                    if let targetId = viewModel.targetMessageId {
+                        viewModel.targetMessageId = nil
+                        withAnimation {
+                            proxy.scrollTo(targetId, anchor: .center)
+                        }
+                    } else if let lastMessage = viewModel.messages.last {
                         withAnimation {
                             proxy.scrollTo(lastMessage.id, anchor: .bottom)
                         }
@@ -199,9 +211,11 @@ private class ConversationViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isSending = false
     @Published var errorMessage: String?
+    var targetMessageId: String?
 
-    init(conversationId: String) {
+    init(conversationId: String, targetMessageId: String? = nil) {
         self.conversationId = conversationId
+        self.targetMessageId = targetMessageId
     }
 
     func loadMessages() async {

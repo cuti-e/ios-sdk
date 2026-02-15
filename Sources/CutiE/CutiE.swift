@@ -254,15 +254,17 @@ public class CutiE {
     // MARK: - Inbox UI
 
     /// Present the inbox view modally
-    /// - Parameter from: The view controller to present from (optional, will find topmost if nil)
+    /// - Parameters:
+    ///   - viewController: The view controller to present from (optional, will find topmost if nil)
+    ///   - conversationId: If provided, automatically navigates to this conversation
     @available(iOS 15.0, *)
-    public func showInbox(from viewController: UIViewController? = nil) {
+    public func showInbox(from viewController: UIViewController? = nil, conversationId: String? = nil) {
         guard isConfigured else {
             NSLog("[CutiE] Cannot show inbox: SDK not configured")
             return
         }
 
-        let inboxView = CutiEInboxView()
+        let inboxView = CutiEInboxView(conversationId: conversationId)
         let hostingController = UIHostingController(rootView: inboxView)
         hostingController.modalPresentationStyle = .pageSheet
 
