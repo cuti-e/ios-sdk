@@ -5,6 +5,13 @@ All notable changes to the CutiE iOS SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0](https://github.com/cuti-e/ios-sdk/compare/2.0.0...2.1.0) (2026-02-15)
+
+
+### Features
+
+* add deep-link navigation support to inbox and conversation views ([#71](https://github.com/cuti-e/ios-sdk/issues/71)) ([eab42d4](https://github.com/cuti-e/ios-sdk/commit/eab42d45421f8dfe175a74676ea7a4d5b27c0339)), closes [#70](https://github.com/cuti-e/ios-sdk/issues/70)
+
 ## [2.0.0](https://github.com/cuti-e/ios-sdk/compare/1.1.1...2.0.0) (2026-02-15)
 
 
