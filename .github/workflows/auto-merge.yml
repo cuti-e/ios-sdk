@@ -96,27 +96,34 @@ jobs:
         with:
           script: |
             const pr_number = ${{ steps.get-pr.outputs.pr_number }};
+            const maxWait = 2 * 60 * 1000; // 2 minutes
+            const startTime = Date.now();
 
-            // Wait for auto-merge to complete
-            await new Promise(resolve => setTimeout(resolve, 10000));
+            // Poll until PR is merged (auto-merge happens asynchronously)
+            while (Date.now() - startTime < maxWait) {
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr_number
+              });
 
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pr_number
-            });
+              if (pr.merged_at) {
+                // GITHUB_TOKEN merges don't trigger push events, so dispatch manually
+                console.log('PR merged, triggering release-please...');
+                try {
+                  await github.rest.actions.createWorkflowDispatch({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    workflow_id: 'release-please.yml',
+                    ref: 'main'
+                  });
+                  console.log('Release-please workflow triggered');
+                } catch (err) {
+                  console.log(`Failed to trigger release-please: ${err.message}`);
+                }
+                return;
+              }
 
-            if (!pr.merged) {
-              console.log('PR not yet merged, skipping release-please trigger');
-              return;
+              await new Promise(resolve => setTimeout(resolve, 5000));
             }
-
-            // GITHUB_TOKEN merges don't trigger push events, so dispatch manually
-            console.log('PR merged, triggering release-please...');
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'release-please.yml',
-              ref: 'main'
-            });
-            console.log('Release-please workflow triggered');
+            console.log('PR not merged within timeout, skipping release-please trigger');
