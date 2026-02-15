@@ -95,7 +95,6 @@ flowchart TB
             Push["CutiEPushNotifications<br/>(APNs Handler)"]
             Attest["CutiEAppAttest<br/>(Device Verification)"]
             Pinning["CutiECertificatePinning<br/>(SSL Security)"]
-            Subscriptions["CutiESubscriptionManager<br/>(StoreKit)"]
         end
     end
 
@@ -412,7 +411,6 @@ Sources/CutiE/
 ├── CutiECertificatePinning.swift  # SSL certificate pinning
 ├── CutiEFeedbackView.swift        # Feedback form (SwiftUI)
 ├── CutiEPushNotifications.swift   # APNs integration
-├── CutiESubscriptionManager.swift # StoreKit subscriptions
 ├── Models.swift                   # Data models
 └── Views/
     ├── CutiEInboxView.swift       # Conversation list

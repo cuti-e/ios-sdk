@@ -73,5 +73,4 @@ CutiE.shared.configure(
 ### Next Steps
 
 - <doc:CreatingConversations>
-- <doc:ManagingSubscriptions>
 - <doc:PushNotifications>
