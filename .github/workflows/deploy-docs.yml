@@ -45,6 +45,11 @@ jobs:
 
           echo "Generated $(find docs -type f | wc -l | tr -d ' ') files"
 
+      - name: Install GNU tar
+        run: |
+          brew list gnu-tar &>/dev/null || brew install gnu-tar
+          echo "$(brew --prefix gnu-tar)/libexec/gnubin" >> $GITHUB_PATH
+
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
