@@ -180,11 +180,15 @@ struct SettingsView: View {
             }
         }
         .sheet(isPresented: $showInbox) {
+            // Show inbox with all conversations
             CutiEInboxView()
-
-            // Or deep-link to a specific conversation
-            // CutiEInboxView(conversationId: "conv_abc123")
         }
+
+        // Or deep-link to a specific conversation instead:
+        //
+        // .sheet(isPresented: $showInbox) {
+        //     CutiEInboxView(conversationId: "conv_abc123")
+        // }
     }
 }
 ```
