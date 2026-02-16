@@ -64,6 +64,12 @@ if #available(iOS 15.0, *) {
 - ``CutiEAppAttest``
 - ``AppAttestError``
 
+### Views
+
+- ``CutiEInboxView``
+- ``CutiEConversationView``
+- ``CutiEFeedbackView``
+
 ### Push Notifications
 
 - ``CutiEPushNotifications``
