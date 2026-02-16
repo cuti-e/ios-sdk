@@ -250,6 +250,62 @@ public class CutiE {
         return pushNotifications.registerToken(deviceToken)
     }
 
+    // MARK: - Device Linking (iOS 15+)
+
+    /// Generate a link token to display as QR code on the source device
+    /// - Returns: Link token response containing the token and expiration
+    @available(iOS 15.0, macOS 12.0, *)
+    public func initiateLinkToken() async throws -> LinkTokenResponse {
+        guard let client = apiClient else {
+            throw CutiEError.notConfigured
+        }
+        return try await client.initiateLinkToken()
+    }
+
+    /// Confirm a device link on the target device after scanning QR code
+    /// - Parameters:
+    ///   - token: The link token from the QR code
+    ///   - deviceName: Optional display name for this device
+    /// - Returns: Confirmation response with group ID
+    @available(iOS 15.0, macOS 12.0, *)
+    public func confirmLink(token: String, deviceName: String? = nil) async throws -> LinkConfirmResponse {
+        guard let client = apiClient else {
+            throw CutiEError.notConfigured
+        }
+        return try await client.confirmLink(token: token, deviceName: deviceName)
+    }
+
+    /// Check the status of a link token (polling for confirmation)
+    /// - Parameter token: The link token to check
+    /// - Returns: Status response indicating pending, confirmed, or expired
+    @available(iOS 15.0, macOS 12.0, *)
+    public func checkLinkStatus(token: String) async throws -> LinkStatusResponse {
+        guard let client = apiClient else {
+            throw CutiEError.notConfigured
+        }
+        return try await client.checkLinkStatus(token: token)
+    }
+
+    /// Get all devices linked to this device's group
+    /// - Returns: Response containing linked status and device list
+    @available(iOS 15.0, macOS 12.0, *)
+    public func getLinkedDevices() async throws -> LinkedDevicesResponse {
+        guard let client = apiClient else {
+            throw CutiEError.notConfigured
+        }
+        return try await client.getLinkedDevices()
+    }
+
+    /// Remove a device from the linked group
+    /// - Parameter deviceId: The ID of the device to unlink
+    @available(iOS 15.0, macOS 12.0, *)
+    public func unlinkDevice(_ deviceId: String) async throws {
+        guard let client = apiClient else {
+            throw CutiEError.notConfigured
+        }
+        try await client.unlinkDevice(deviceId)
+    }
+
     #if os(iOS)
     // MARK: - Inbox UI
 
