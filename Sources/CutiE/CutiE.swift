@@ -328,6 +328,25 @@ public class CutiE {
         presenter?.present(hostingController, animated: true)
     }
 
+    /// Present the feedback form modally
+    /// - Parameters:
+    ///   - viewController: The view controller to present from (optional, will find topmost if nil)
+    ///   - onSuccess: Callback with conversation ID when feedback is submitted
+    @available(iOS 15.0, *)
+    public func showFeedback(from viewController: UIViewController? = nil, onSuccess: ((String) -> Void)? = nil) {
+        guard isConfigured else {
+            NSLog("[CutiE] Cannot show feedback: SDK not configured")
+            return
+        }
+
+        let feedbackView = CutiEFeedbackView(onSuccess: onSuccess)
+        let hostingController = UIHostingController(rootView: feedbackView)
+        hostingController.modalPresentationStyle = .pageSheet
+
+        let presenter = viewController ?? Self.topViewController()
+        presenter?.present(hostingController, animated: true)
+    }
+
     /// Find the topmost view controller
     private static func topViewController() -> UIViewController? {
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,

@@ -6,6 +6,7 @@ import SwiftUI
 public struct CutiEInboxView: View {
     @StateObject private var viewModel: InboxViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var showFeedbackSheet = false
 
     /// Create an inbox view, optionally navigating directly to a conversation
     /// - Parameter conversationId: If provided, automatically navigates to this conversation on appear
@@ -33,12 +34,20 @@ public struct CutiEInboxView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        Task { await viewModel.loadConversations() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
+                    HStack(spacing: 16) {
+                        Button {
+                            Task { await viewModel.loadConversations() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .disabled(viewModel.isLoading)
+
+                        Button {
+                            showFeedbackSheet = true
+                        } label: {
+                            Image(systemName: "square.and.pencil")
+                        }
                     }
-                    .disabled(viewModel.isLoading)
                 }
             }
             .background(
@@ -66,6 +75,11 @@ public struct CutiEInboxView: View {
                 Text(viewModel.errorMessage ?? "")
             }
         }
+        .sheet(isPresented: $showFeedbackSheet, onDismiss: {
+            Task { await viewModel.loadConversations() }
+        }) {
+            CutiEFeedbackView()
+        }
         .task {
             await viewModel.loadConversations()
         }
@@ -78,10 +92,16 @@ public struct CutiEInboxView: View {
                 .foregroundColor(.secondary)
             Text("No Feedback Yet")
                 .font(.headline)
-            Text("Your feedback conversations will appear here.")
+            Text("Tap the compose button to send us your feedback.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+            Button {
+                showFeedbackSheet = true
+            } label: {
+                Text("Send Feedback")
+            }
+            .buttonStyle(.borderedProminent)
         }
         .padding()
     }
