@@ -34,7 +34,7 @@ Or add it to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/cuti-e/ios-sdk.git", from: "1.0.103")
+    .package(url: "https://github.com/cuti-e/ios-sdk.git", from: "2.1.0")
 ],
 targets: [
     .target(
@@ -159,6 +159,9 @@ CutiE.shared.showInbox()
 
 // Or from a specific view controller
 CutiE.shared.showInbox(from: self)
+
+// Navigate directly to a conversation (e.g., from a push notification)
+CutiE.shared.showInbox(conversationId: "conv_abc123")
 ```
 
 ### SwiftUI Integration
@@ -178,6 +181,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showInbox) {
             CutiEInboxView()
+
+            // Or deep-link to a specific conversation
+            // CutiEInboxView(conversationId: "conv_abc123")
         }
     }
 }
@@ -474,11 +480,9 @@ class MyNotificationHandler: CutiEPushNotificationDelegate {
     }
 
     func cutiEShouldOpenConversation(conversationId: String) {
-        // User tapped notification - navigate to conversation
+        // User tapped notification - navigate directly to the conversation
         print("Open conversation: \(conversationId)")
-
-        // Example: Open the inbox and show this conversation
-        CutiE.shared.showInbox()
+        CutiE.shared.showInbox(conversationId: conversationId)
     }
 }
 ```

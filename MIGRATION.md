@@ -4,6 +4,8 @@ This guide helps you migrate between versions of the CutiE iOS SDK.
 
 ## Table of Contents
 
+- [Migrating to 2.1.0 (Deep-link Navigation)](#migrating-to-210-deep-link-navigation)
+- [Migrating to 2.0.0 (SubscriptionManager Removal)](#migrating-to-200-subscriptionmanager-removal)
 - [Migrating to 1.0.102+ (API Key Removal)](#migrating-to-10102-api-key-removal)
 - [Migrating to 1.0.104+ (Push Token Validation)](#migrating-to-10104-push-token-validation)
 - [Adding Optional Features](#adding-optional-features)
@@ -11,6 +13,117 @@ This guide helps you migrate between versions of the CutiE iOS SDK.
   - [Push Notifications](#adding-push-notifications)
   - [Device Linking](#adding-device-linking)
 - [Troubleshooting](#troubleshooting)
+
+---
+
+## Migrating to 2.1.0 (Deep-link Navigation)
+
+**Version 2.1.0** adds deep-link navigation support, allowing you to open the inbox directly to a specific conversation or scroll to a specific message.
+
+### New Parameters
+
+**`showInbox(conversationId:)`** - Navigate directly to a conversation (e.g., from a push notification):
+
+```swift
+// Before: opens inbox at conversation list
+CutiE.shared.showInbox()
+
+// After: opens inbox and navigates to a specific conversation
+CutiE.shared.showInbox(conversationId: "conv_abc123")
+```
+
+**`CutiEInboxView(conversationId:)`** - SwiftUI deep-link support:
+
+```swift
+// Before
+CutiEInboxView()
+
+// After: deep-link to a conversation
+CutiEInboxView(conversationId: "conv_abc123")
+```
+
+**`CutiEConversationView(conversation:targetMessageId:)`** - Scroll to a specific message:
+
+```swift
+// Before: scrolls to the latest message
+CutiEConversationView(conversation: conversation)
+
+// After: scrolls to a specific message
+CutiEConversationView(conversation: conversation, targetMessageId: "msg_xyz789")
+```
+
+### Push Notification Deep-linking
+
+Use the new `conversationId` parameter in your notification delegate to navigate users directly to the relevant conversation:
+
+```swift
+func cutiEShouldOpenConversation(conversationId: String) {
+    CutiE.shared.showInbox(conversationId: conversationId)
+}
+```
+
+### Public Device Linking API
+
+Device linking methods are now available directly on `CutiE.shared` (previously required accessing the internal `apiClient`):
+
+```swift
+// Before (did not compile - apiClient was internal)
+let response = try await CutiE.shared.apiClient?.initiateLinkToken()
+
+// After
+let response = try await CutiE.shared.initiateLinkToken()
+```
+
+All five device linking methods are now public: `initiateLinkToken()`, `confirmLink(token:deviceName:)`, `checkLinkStatus(token:)`, `getLinkedDevices()`, `unlinkDevice(_:)`.
+
+### Backward Compatibility
+
+All new parameters are optional with `nil` defaults. Existing code continues to work without changes.
+
+---
+
+## Migrating to 2.0.0 (SubscriptionManager Removal)
+
+**Version 2.0.0** removes `CutiESubscriptionManager`. Subscription management has moved to [RevenueCat](https://www.revenuecat.com).
+
+### Breaking Change
+
+If you were using `CutiESubscriptionManager`, you must remove all references:
+
+```swift
+// REMOVED in 2.0.0 - these will not compile
+CutiE.shared.subscriptionManager.purchase(product)
+CutiE.shared.subscriptionManager.restorePurchases()
+CutiE.shared.subscriptionManager.getProducts()
+```
+
+### Migration Steps
+
+1. **Remove all `CutiESubscriptionManager` usage** from your code
+2. **Integrate RevenueCat SDK** if you need subscription management:
+   ```swift
+   // Package.swift
+   .package(url: "https://github.com/RevenueCat/purchases-ios.git", from: "5.0.0")
+   ```
+3. **Replace subscription calls** with RevenueCat equivalents:
+   ```swift
+   import RevenueCat
+
+   // Configure
+   Purchases.configure(withAPIKey: "appl_your_key")
+
+   // Purchase
+   let result = try await Purchases.shared.purchase(package: package)
+
+   // Check entitlements
+   let info = try await Purchases.shared.customerInfo()
+   let isPro = info.entitlements["pro"]?.isActive == true
+   ```
+
+### What Else Changed
+
+- No other breaking changes in 2.0.0
+- All conversation, inbox, push notification, and App Attest APIs remain unchanged
 
 ---
 
@@ -264,12 +377,12 @@ Device linking lets users share their inbox across multiple devices.
 
 ```swift
 // Generate link token
-let response = try await CutiE.shared.apiClient?.initiateLinkToken()
-let qrData = response?.linkToken  // Encode as QR code
+let response = try await CutiE.shared.initiateLinkToken()
+let qrData = response.linkToken  // Encode as QR code
 
 // Poll for confirmation
-let status = try await CutiE.shared.apiClient?.checkLinkStatus(token: token)
-if status?.status == .confirmed {
+let status = try await CutiE.shared.checkLinkStatus(token: response.linkToken)
+if status.status == .confirmed {
     print("Device linked!")
 }
 ```
@@ -278,7 +391,7 @@ if status?.status == .confirmed {
 
 ```swift
 // After scanning QR code
-let result = try await CutiE.shared.apiClient?.confirmLink(
+let result = try await CutiE.shared.confirmLink(
     token: scannedToken,
     deviceName: UIDevice.current.name
 )
@@ -288,10 +401,10 @@ let result = try await CutiE.shared.apiClient?.confirmLink(
 
 ```swift
 // List linked devices
-let devices = try await CutiE.shared.apiClient?.getLinkedDevices()
+let devices = try await CutiE.shared.getLinkedDevices()
 
 // Unlink a device
-try await CutiE.shared.apiClient?.unlinkDevice(deviceId)
+try await CutiE.shared.unlinkDevice(deviceId)
 ```
 
 ---
@@ -351,6 +464,8 @@ let token = deviceToken.map { String(format: "%02x", $0) }.joined()
 
 | Version | Key Changes |
 |---------|-------------|
+| 2.1.0   | Deep-link navigation, public device linking API |
+| 2.0.0   | **SubscriptionManager removed** (breaking change) |
 | 1.0.104 | Push token validation, input sanitization |
 | 1.0.103 | DocC documentation, CI improvements |
 | 1.0.102 | **API key removal**, anonymous device registration |
