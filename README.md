@@ -164,6 +164,23 @@ CutiE.shared.showInbox(from: self)
 CutiE.shared.showInbox(conversationId: "conv_abc123")
 ```
 
+### Show Feedback Form (UIKit)
+
+Present the feedback form directly without showing the inbox:
+
+```swift
+// From any view controller
+CutiE.shared.showFeedback()
+
+// With success callback
+CutiE.shared.showFeedback { conversationId in
+    print("Feedback submitted: \(conversationId)")
+}
+
+// From a specific view controller
+CutiE.shared.showFeedback(from: self)
+```
+
 ### SwiftUI Integration
 
 ```swift

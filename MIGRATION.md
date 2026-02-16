@@ -4,6 +4,7 @@ This guide helps you migrate between versions of the CutiE iOS SDK.
 
 ## Table of Contents
 
+- [Migrating to 2.2.0 (Compose Button & showFeedback)](#migrating-to-220-compose-button--showfeedback)
 - [Migrating to 2.1.0 (Deep-link Navigation)](#migrating-to-210-deep-link-navigation)
 - [Migrating to 2.0.0 (SubscriptionManager Removal)](#migrating-to-200-subscriptionmanager-removal)
 - [Migrating to 1.0.102+ (API Key Removal)](#migrating-to-10102-api-key-removal)
@@ -13,6 +14,39 @@ This guide helps you migrate between versions of the CutiE iOS SDK.
   - [Push Notifications](#adding-push-notifications)
   - [Device Linking](#adding-device-linking)
 - [Troubleshooting](#troubleshooting)
+
+---
+
+## Migrating to 2.2.0 (Compose Button & showFeedback)
+
+**Version 2.2.0** adds a compose button to the inbox and a new `showFeedback()` API for presenting the feedback form programmatically.
+
+### Inbox Compose Button
+
+The inbox now includes a compose button (pencil icon) in the toolbar alongside the refresh button. Users can tap it to open the feedback form directly from the inbox. The empty state also shows a "Send Feedback" button for discoverability.
+
+No code changes required - the compose button is built into `CutiEInboxView`.
+
+### New: showFeedback() API
+
+Present the feedback form programmatically from UIKit, mirroring the existing `showInbox()` pattern:
+
+```swift
+// Present feedback form
+CutiE.shared.showFeedback()
+
+// With success callback
+CutiE.shared.showFeedback { conversationId in
+    print("Feedback submitted: \(conversationId)")
+}
+
+// From a specific view controller
+CutiE.shared.showFeedback(from: self)
+```
+
+### Backward Compatibility
+
+All changes are additive. Existing code continues to work without modifications.
 
 ---
 
