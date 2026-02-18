@@ -5,6 +5,13 @@ All notable changes to the CutiE iOS SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0](https://github.com/cuti-e/ios-sdk/compare/2.2.0...2.3.0) (2026-02-18)
+
+
+### Features
+
+* add anonymous activity tracking with consent ([#80](https://github.com/cuti-e/ios-sdk/issues/80)) ([21411ff](https://github.com/cuti-e/ios-sdk/commit/21411ff8160f9431c6535cb3d594644da127f73d))
+
 ## [2.2.0](https://github.com/cuti-e/ios-sdk/compare/2.1.0...2.2.0) (2026-02-16)
 
 
