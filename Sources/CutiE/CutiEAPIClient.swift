@@ -637,6 +637,33 @@ internal class CutiEAPIClient {
         return hash.map { String(format: "%02x", $0) }.joined()
     }
 
+    // MARK: - Activity Ping
+
+    /// Send a fire-and-forget activity ping. Bypasses the normal request pipeline
+    /// (no ensureDeviceToken, no response decoding). All errors are silently ignored.
+    func sendActivityPing(hashedDeviceID: String) {
+        guard let url = URL(string: "\(configuration.apiURL)/v1/activity/ping") else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(CutiE.sdkVersion, forHTTPHeaderField: "X-CutiE-SDK-Version")
+        request.setValue(configuration.appId, forHTTPHeaderField: "X-App-ID")
+        request.setValue(configuration.deviceID, forHTTPHeaderField: "X-Device-ID")
+        if let token = getDeviceTokenFromKeychain() {
+            request.setValue(token, forHTTPHeaderField: "X-Device-Token")
+        }
+
+        let body: [String: Any] = [
+            "hashed_device_id": hashedDeviceID,
+            "consent": true
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        // Fire-and-forget — ignore response and errors
+        session.dataTask(with: request) { _, _, _ in }.resume()
+    }
+
     // MARK: - Generic Request
 
     private func request<T: Decodable>(
