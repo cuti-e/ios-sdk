@@ -13,11 +13,10 @@ internal struct CutiEAnalyticsConsentView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            Spacer()
-
             Image(systemName: "chart.bar.xaxis.ascending")
                 .font(.system(size: 48))
                 .foregroundColor(.accentColor)
+                .padding(.top, 32)
 
             Text("Help Improve \(appName)")
                 .font(.title2)
@@ -28,6 +27,7 @@ internal struct CutiEAnalyticsConsentView: View {
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal)
 
             Spacer()
