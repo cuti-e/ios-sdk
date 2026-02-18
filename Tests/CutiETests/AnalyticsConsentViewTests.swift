@@ -1,9 +1,12 @@
 import XCTest
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 @testable import CutiE
 
 #if os(iOS)
-@available(iOS 16.0, *)
+@available(iOS 15.0, *)
 final class AnalyticsConsentViewTests: XCTestCase {
 
     // MARK: - View Construction
@@ -53,8 +56,8 @@ final class AnalyticsConsentViewTests: XCTestCase {
         )
         hostingController.loadViewIfNeeded()
 
-        // Render at iPhone SE width to catch truncation on small screens
-        let smallScreenSize = CGSize(width: 320, height: 480)
+        // Render at iPhone SE width and a height closer to a medium sheet detent
+        let smallScreenSize = CGSize(width: 320, height: 320)
         hostingController.view.frame = CGRect(origin: .zero, size: smallScreenSize)
         hostingController.view.layoutIfNeeded()
 
