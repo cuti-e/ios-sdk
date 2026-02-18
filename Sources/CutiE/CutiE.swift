@@ -75,6 +75,9 @@ public class CutiE {
             CutiEPushNotifications.shared.onSDKConfigured()
         }
 
+        // Notify analytics manager that SDK is configured
+        CutiEAnalytics.shared.onSDKConfigured()
+
         // Initialize App Attest if enabled
         if useAppAttest {
             if #available(iOS 14.0, macOS 11.0, *) {
@@ -305,6 +308,54 @@ public class CutiE {
         }
         try await client.unlinkDevice(deviceId)
     }
+
+    // MARK: - Analytics
+
+    /// Whether anonymous activity tracking is currently enabled.
+    /// Requires prior user consent via ``setAnalyticsConsent(_:)`` or ``requestAnalyticsConsent(from:completion:)``.
+    public var analyticsEnabled: Bool {
+        get { CutiEAnalytics.shared.isEnabled }
+        set { CutiEAnalytics.shared.isEnabled = newValue }
+    }
+
+    /// Record the user's analytics consent decision.
+    /// - Parameter enabled: `true` to allow anonymous activity pings, `false` to opt out.
+    public func setAnalyticsConsent(_ enabled: Bool) {
+        CutiEAnalytics.shared.isEnabled = enabled
+    }
+
+    /// Whether the user has already been presented with the analytics consent prompt.
+    public var hasAskedForAnalyticsConsent: Bool {
+        CutiEAnalytics.shared.hasBeenAsked
+    }
+
+    #if os(iOS)
+    /// Present a consent sheet asking the user to opt in to anonymous activity tracking.
+    /// - Parameters:
+    ///   - viewController: The view controller to present from (uses topmost if nil).
+    ///   - completion: Called with the user's decision (`true` = allowed, `false` = declined).
+    @available(iOS 15.0, *)
+    public func requestAnalyticsConsent(from viewController: UIViewController? = nil, completion: @escaping (Bool) -> Void) {
+        let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? "this app"
+
+        let consentView = CutiEAnalyticsConsentView(appName: appName) { granted in
+            CutiEAnalytics.shared.isEnabled = granted
+            completion(granted)
+        }
+        let hostingController = UIHostingController(rootView: consentView)
+        hostingController.modalPresentationStyle = .pageSheet
+
+        if let sheet = hostingController.sheetPresentationController {
+            sheet.detents = [.medium()]
+            sheet.prefersGrabberIndicator = true
+        }
+
+        let presenter = viewController ?? Self.topViewController()
+        presenter?.present(hostingController, animated: true)
+    }
+    #endif
 
     #if os(iOS)
     // MARK: - Inbox UI
