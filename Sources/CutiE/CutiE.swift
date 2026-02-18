@@ -349,7 +349,7 @@ public class CutiE {
 
         if let sheet = hostingController.sheetPresentationController {
             sheet.detents = [.medium()]
-            sheet.prefersGrabberIndicator = true
+            sheet.prefersGrabberVisible = true
         }
 
         let presenter = viewController ?? Self.topViewController()
