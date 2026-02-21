@@ -9,7 +9,7 @@ import UIKit
 public class CutiE {
 
     /// SDK version (matches git tag)
-    internal static let sdkVersion = "2.3.1" // x-release-please-version
+    internal static let sdkVersion = "2.4.0" // x-release-please-version
 
     /// Shared singleton instance
     public static let shared = CutiE()
