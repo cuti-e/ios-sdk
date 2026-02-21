@@ -174,6 +174,9 @@ internal class CutiEAPIClient {
             body["user_name"] = userName
         }
 
+        // Include device context fields based on configuration.
+        // For conversations, always send app_version/os_version/device_model if set
+        // (backward compatible behavior), plus new fields from deviceContext config.
         if let appVersion = configuration.appVersion {
             body["app_version"] = appVersion
         }
@@ -182,6 +185,12 @@ internal class CutiEAPIClient {
         body["os_version"] = UIDevice.current.systemVersion
         body["device_model"] = UIDevice.current.model
         #endif
+
+        // Add configured device context fields (language, country, etc.)
+        // These overwrite any existing keys if also set above, which is fine
+        for (key, value) in configuration.deviceContextPayload() {
+            body[key] = value
+        }
 
         request(endpoint: endpoint, method: "POST", body: body) { (result: Result<CreateConversationResponse, CutiEError>) in
             switch result {
@@ -654,10 +663,16 @@ internal class CutiEAPIClient {
             request.setValue(token, forHTTPHeaderField: "X-Device-Token")
         }
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "hashed_device_id": hashedDeviceID,
             "consent": true
         ]
+
+        // Include configured device context fields
+        for (key, value) in configuration.deviceContextPayload() {
+            body[key] = value
+        }
+
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         // Fire-and-forget — ignore response and errors

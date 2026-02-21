@@ -53,7 +53,8 @@ public class CutiE {
     ///   - appId: Your App ID from the admin dashboard (created in Settings > Apps)
     ///   - apiURL: Optional custom API URL (defaults to production)
     ///   - useAppAttest: Enable Apple App Attest for enhanced security (iOS 14+). When enabled, requests are cryptographically signed by the Secure Enclave. Automatically falls back on unsupported devices.
-    public func configure(appId: String, apiURL: String = "https://api.cuti-e.com", useAppAttest: Bool = false) {
+    ///   - deviceContext: Which device context fields to include in activity pings and conversations. Default is `.none` for backward compatibility. Use `.standard` for language, country, app version, and OS version.
+    public func configure(appId: String, apiURL: String = "https://api.cuti-e.com", useAppAttest: Bool = false, deviceContext: DeviceContextConfig = .none) {
         // Enforce HTTPS for security and validate URL format
         guard let url = URL(string: apiURL), url.scheme?.lowercased() == "https" else {
             NSLog("[CutiE] ERROR: apiURL must be a valid HTTPS URL. Configuration rejected.")
@@ -65,7 +66,8 @@ public class CutiE {
             apiURL: apiURL,
             deviceID: deviceID,
             appId: appId,
-            useAppAttest: useAppAttest
+            useAppAttest: useAppAttest,
+            deviceContext: deviceContext
         )
 
         self.apiClient = CutiEAPIClient(configuration: configuration!)
@@ -429,13 +431,57 @@ public class CutiEConfiguration {
     /// Whether App Attest is enabled for enhanced security (iOS 14+)
     public let useAppAttest: Bool
 
+    /// Which device context fields to include in activity pings and conversations
+    public let deviceContext: DeviceContextConfig
+
     /// Initialize with App ID (API key optional for backwards compatibility)
-    init(apiKey: String?, apiURL: String, deviceID: String, appId: String, useAppAttest: Bool = false) {
+    init(apiKey: String?, apiURL: String, deviceID: String, appId: String, useAppAttest: Bool = false, deviceContext: DeviceContextConfig = .none) {
         self.apiKey = apiKey
         self.apiURL = apiURL
         self.deviceID = deviceID
         self.appId = appId
         self.useAppAttest = useAppAttest
+        self.deviceContext = deviceContext
+    }
+
+    /// Build a dictionary of enabled device context values for API payloads
+    internal func deviceContextPayload() -> [String: String] {
+        var result: [String: String] = [:]
+        let fields = deviceContext.enabledFields
+
+        if fields.contains(.language) {
+            if #available(iOS 16.0, macOS 13.0, *) {
+                result["language"] = Locale.current.language.languageCode?.identifier
+            } else {
+                result["language"] = Locale.current.languageCode
+            }
+        }
+
+        if fields.contains(.country) {
+            if #available(iOS 16.0, macOS 13.0, *) {
+                result["country"] = Locale.current.region?.identifier
+            } else {
+                result["country"] = Locale.current.regionCode
+            }
+        }
+
+        if fields.contains(.appVersion) {
+            if let version = appVersion ?? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+                result["app_version"] = version
+            }
+        }
+
+        #if os(iOS)
+        if fields.contains(.osVersion) {
+            result["os_version"] = UIDevice.current.systemVersion
+        }
+
+        if fields.contains(.deviceModel) {
+            result["device_model"] = UIDevice.current.model
+        }
+        #endif
+
+        return result
     }
 }
 
