@@ -420,3 +420,68 @@ internal struct UnlinkDeviceResponse: Codable {
     let success: Bool
     let message: String
 }
+
+// MARK: - Device Context Configuration
+
+/// Individual device context fields that can be included in activity pings and conversations.
+/// App developers choose which fields to send based on their privacy requirements.
+public enum DeviceContextField: String, CaseIterable, Sendable {
+    /// Device language code from Locale (e.g., "en", "nb", "de")
+    case language
+    /// Device country/region code from Locale (e.g., "US", "NO", "DE")
+    case country
+    /// App bundle version (CFBundleShortVersionString)
+    case appVersion
+    /// Operating system version (e.g., "17.4")
+    case osVersion
+    /// Device hardware model (e.g., "iPhone", "iPad")
+    case deviceModel
+}
+
+/// Configuration for which device context fields the SDK sends with activity pings and conversations.
+///
+/// App developers set this during ``CutiE/configure(appId:apiURL:useAppAttest:deviceContext:)``
+/// to control what data is collected. Different apps have different privacy needs:
+///
+/// ```swift
+/// // Kids app (COPPA): minimal context
+/// CutiE.configure(appId: "app_xxx", deviceContext: .none)
+///
+/// // Consumer app: full analytics
+/// CutiE.configure(appId: "app_xxx", deviceContext: .all)
+///
+/// // Custom selection
+/// CutiE.configure(appId: "app_xxx", deviceContext: .custom([.language, .country]))
+/// ```
+///
+/// - Note: For backward compatibility, conversations always include OS version and device model
+///   on iOS regardless of this configuration. Activity pings only include fields enabled here.
+public enum DeviceContextConfig: Sendable {
+    /// No extra context fields (default - backward compatible). Conversations still send OS version
+    /// and device model on iOS for backward compatibility. Activity pings send no extra context.
+    case none
+    /// Only app version
+    case minimal
+    /// Language, country, app version, and OS version
+    case standard
+    /// All available fields
+    case all
+    /// Pick specific fields
+    case custom(Set<DeviceContextField>)
+
+    /// The set of enabled fields for this configuration
+    public var enabledFields: Set<DeviceContextField> {
+        switch self {
+        case .none:
+            return []
+        case .minimal:
+            return [.appVersion]
+        case .standard:
+            return [.language, .country, .appVersion, .osVersion]
+        case .all:
+            return Set(DeviceContextField.allCases)
+        case .custom(let fields):
+            return fields
+        }
+    }
+}

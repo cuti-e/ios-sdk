@@ -174,6 +174,10 @@ internal class CutiEAPIClient {
             body["user_name"] = userName
         }
 
+        // Include device context fields based on configuration.
+        // For backward compatibility, conversations always send os_version and device_model
+        // on iOS (existing behavior since SDK 1.0). app_version is sent when configured
+        // via setAppMetadata(). The deviceContext config adds NEW fields like language/country.
         if let appVersion = configuration.appVersion {
             body["app_version"] = appVersion
         }
@@ -182,6 +186,11 @@ internal class CutiEAPIClient {
         body["os_version"] = UIDevice.current.systemVersion
         body["device_model"] = UIDevice.current.model
         #endif
+
+        // Add configured device context fields (language, country, etc.)
+        for (key, value) in configuration.deviceContextPayload() {
+            body[key] = value
+        }
 
         request(endpoint: endpoint, method: "POST", body: body) { (result: Result<CreateConversationResponse, CutiEError>) in
             switch result {
@@ -654,10 +663,16 @@ internal class CutiEAPIClient {
             request.setValue(token, forHTTPHeaderField: "X-Device-Token")
         }
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "hashed_device_id": hashedDeviceID,
             "consent": true
         ]
+
+        // Include configured device context fields
+        for (key, value) in configuration.deviceContextPayload() {
+            body[key] = value
+        }
+
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         // Fire-and-forget — ignore response and errors
