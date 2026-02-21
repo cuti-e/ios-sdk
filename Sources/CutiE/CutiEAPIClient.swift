@@ -175,8 +175,9 @@ internal class CutiEAPIClient {
         }
 
         // Include device context fields based on configuration.
-        // For conversations, always send app_version/os_version/device_model if set
-        // (backward compatible behavior), plus new fields from deviceContext config.
+        // For backward compatibility, conversations always send os_version and device_model
+        // on iOS (existing behavior since SDK 1.0). app_version is sent when configured
+        // via setAppMetadata(). The deviceContext config adds NEW fields like language/country.
         if let appVersion = configuration.appVersion {
             body["app_version"] = appVersion
         }
@@ -187,7 +188,6 @@ internal class CutiEAPIClient {
         #endif
 
         // Add configured device context fields (language, country, etc.)
-        // These overwrite any existing keys if also set above, which is fine
         for (key, value) in configuration.deviceContextPayload() {
             body[key] = value
         }

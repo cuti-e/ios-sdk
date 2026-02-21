@@ -53,7 +53,7 @@ public class CutiE {
     ///   - appId: Your App ID from the admin dashboard (created in Settings > Apps)
     ///   - apiURL: Optional custom API URL (defaults to production)
     ///   - useAppAttest: Enable Apple App Attest for enhanced security (iOS 14+). When enabled, requests are cryptographically signed by the Secure Enclave. Automatically falls back on unsupported devices.
-    ///   - deviceContext: Which device context fields to include in activity pings and conversations. Default is `.none` for backward compatibility. Use `.standard` for language, country, app version, and OS version.
+    ///   - deviceContext: Which device context fields to include in activity pings and conversations. Default is `.none`, which only sends minimal device info (OS version, device model) in conversations for backward compatibility. Use `.standard` to also include language, country, and app version.
     public func configure(appId: String, apiURL: String = "https://api.cuti-e.com", useAppAttest: Bool = false, deviceContext: DeviceContextConfig = .none) {
         // Enforce HTTPS for security and validate URL format
         guard let url = URL(string: apiURL), url.scheme?.lowercased() == "https" else {
@@ -450,18 +450,26 @@ public class CutiEConfiguration {
         let fields = deviceContext.enabledFields
 
         if fields.contains(.language) {
+            let language: String?
             if #available(iOS 16.0, macOS 13.0, *) {
-                result["language"] = Locale.current.language.languageCode?.identifier
+                language = Locale.current.language.languageCode?.identifier
             } else {
-                result["language"] = Locale.current.languageCode
+                language = Locale.current.languageCode
+            }
+            if let language, !language.isEmpty {
+                result["language"] = language
             }
         }
 
         if fields.contains(.country) {
+            let country: String?
             if #available(iOS 16.0, macOS 13.0, *) {
-                result["country"] = Locale.current.region?.identifier
+                country = Locale.current.region?.identifier
             } else {
-                result["country"] = Locale.current.regionCode
+                country = Locale.current.regionCode
+            }
+            if let country, !country.isEmpty {
+                result["country"] = country
             }
         }
 

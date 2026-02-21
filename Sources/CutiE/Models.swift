@@ -444,7 +444,7 @@ public enum DeviceContextField: String, CaseIterable, Sendable {
 /// to control what data is collected. Different apps have different privacy needs:
 ///
 /// ```swift
-/// // Kids app (COPPA): collect nothing extra
+/// // Kids app (COPPA): minimal context
 /// CutiE.configure(appId: "app_xxx", deviceContext: .none)
 ///
 /// // Consumer app: full analytics
@@ -453,8 +453,12 @@ public enum DeviceContextField: String, CaseIterable, Sendable {
 /// // Custom selection
 /// CutiE.configure(appId: "app_xxx", deviceContext: .custom([.language, .country]))
 /// ```
+///
+/// - Note: For backward compatibility, conversations always include OS version and device model
+///   on iOS regardless of this configuration. Activity pings only include fields enabled here.
 public enum DeviceContextConfig: Sendable {
-    /// No extra context fields (default - backward compatible, privacy-first)
+    /// No extra context fields (default - backward compatible). Conversations still send OS version
+    /// and device model on iOS for backward compatibility. Activity pings send no extra context.
     case none
     /// Only app version
     case minimal
