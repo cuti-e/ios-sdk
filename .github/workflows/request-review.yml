@@ -1,0 +1,89 @@
+name: Request Review-E Review
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+    branches: [main]
+
+jobs:
+  request-review:
+    name: Request Review-E
+    runs-on: [self-hosted, Linux]
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      !contains(github.event.pull_request.labels.*.name, 'manual-merge')
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Request review from Review-E
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr_number = context.payload.pull_request.number;
+            const pr_author = context.payload.pull_request.user.login;
+
+            // Don't request review from self
+            if (pr_author === 'review-e-dashecorp') {
+              console.log('PR author is Review-E, skipping');
+              return;
+            }
+
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr_number,
+                reviewers: ['review-e-dashecorp']
+              });
+              console.log(`Requested review from review-e-dashecorp on PR #${pr_number}`);
+            } catch (error) {
+              console.log(`Failed to request review: ${error.message}`);
+            }
+
+      - name: Notify Review-E on Discord
+        if: >-
+          github.event.pull_request.user.login != 'review-e-dashecorp'
+        env:
+          WEBHOOK_URL: ${{ secrets.REVIEW_E_DISCORD_WEBHOOK }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const webhookUrl = process.env.WEBHOOK_URL;
+            if (!webhookUrl) {
+              console.log('No REVIEW_E_DISCORD_WEBHOOK secret set, skipping Discord notification');
+              return;
+            }
+
+            const pr = context.payload.pull_request;
+            const repo = context.repo.repo;
+            const number = pr.number;
+            const title = pr.title;
+            const author = pr.user.login;
+            const url = pr.html_url;
+
+            const message = `**New PR ready for review:** ${repo} #${number}\n` +
+              `**Title:** ${title}\n` +
+              `**Author:** ${author}\n` +
+              `**Link:** ${url}\n\n` +
+              `review ${repo} #${number}`;
+
+            try {
+              const response = await fetch(webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  content: message,
+                  allowed_mentions: { parse: [] }
+                })
+              });
+
+              if (response.ok) {
+                console.log('Discord notification sent');
+              } else {
+                console.log(`Discord notification failed: ${response.status} ${response.statusText}`);
+              }
+            } catch (error) {
+              console.log(`Discord notification error (non-fatal): ${error.message}`);
+            }
