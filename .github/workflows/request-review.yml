@@ -1,0 +1,44 @@
+name: Request Review-E Review
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+    branches: [main]
+
+jobs:
+  request-review:
+    name: Request Review-E
+    runs-on: [self-hosted, Linux]
+    if: >-
+      !github.event.pull_request.draft &&
+      github.actor != 'dependabot[bot]' &&
+      !contains(github.event.pull_request.labels.*.name, 'manual-merge')
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Request review from Review-E
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr_number = context.payload.pull_request.number;
+            const pr_author = context.payload.pull_request.user.login;
+
+            // Don't request review from self
+            if (pr_author === 'review-e-dashecorp') {
+              console.log('PR author is Review-E, skipping');
+              return;
+            }
+
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr_number,
+                reviewers: ['review-e-dashecorp']
+              });
+              console.log(`Requested review from review-e-dashecorp on PR #${pr_number}`);
+            } catch (error) {
+              console.log(`Failed to request review: ${error.message}`);
+              // Don't fail the workflow - review request is best-effort
+            }
