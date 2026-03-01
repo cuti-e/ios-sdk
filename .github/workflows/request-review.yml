@@ -11,7 +11,7 @@ jobs:
     runs-on: [self-hosted, Linux]
     if: >-
       !github.event.pull_request.draft &&
-      github.actor != 'dependabot[bot]' &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
       !contains(github.event.pull_request.labels.*.name, 'manual-merge')
     permissions:
       pull-requests: write
