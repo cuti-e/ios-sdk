@@ -69,14 +69,21 @@ jobs:
               `**Link:** ${url}\n\n` +
               `review ${repo} #${number}`;
 
-            const response = await fetch(webhookUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ content: message })
-            });
+            try {
+              const response = await fetch(webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  content: message,
+                  allowed_mentions: { parse: [] }
+                })
+              });
 
-            if (response.ok) {
-              console.log('Discord notification sent');
-            } else {
-              console.log(`Discord notification failed: ${response.status} ${response.statusText}`);
+              if (response.ok) {
+                console.log('Discord notification sent');
+              } else {
+                console.log(`Discord notification failed: ${response.status} ${response.statusText}`);
+              }
+            } catch (error) {
+              console.log(`Discord notification error (non-fatal): ${error.message}`);
             }
