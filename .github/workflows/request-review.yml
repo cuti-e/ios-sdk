@@ -8,7 +8,7 @@ on:
 jobs:
   request-review:
     name: Request Review-E
-    runs-on: [self-hosted, Linux]
+    runs-on: arc-linux-ios-sdk
     if: >-
       !github.event.pull_request.draft &&
       github.event.pull_request.user.login != 'dependabot[bot]' &&

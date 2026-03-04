@@ -8,7 +8,7 @@ on:
 jobs:
   auto-merge:
     name: Auto-merge Dependabot
-    runs-on: [self-hosted, Linux]
+    runs-on: arc-linux-ios-sdk
     if: github.actor == 'dependabot[bot]'
     permissions:
       pull-requests: write
