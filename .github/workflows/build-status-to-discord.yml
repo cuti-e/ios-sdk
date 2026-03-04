@@ -1,0 +1,122 @@
+name: Workflow Status to Discord Thread
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+jobs:
+  notify-thread:
+    name: Post Workflow Status
+    runs-on: arc-linux-ios-sdk
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.pull_requests[0]
+    permissions:
+      pull-requests: read
+      issues: read
+
+    steps:
+      - name: Post workflow status to Discord thread
+        env:
+          WEBHOOK_URL: ${{ secrets.REVIEW_E_DISCORD_WEBHOOK }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const webhookUrl = process.env.WEBHOOK_URL;
+            if (!webhookUrl) return;
+
+            const run = context.payload.workflow_run;
+            const conclusion = run.conclusion; // success, failure, cancelled
+            const prInfo = run.pull_requests[0];
+            if (!prInfo) {
+              console.log('No PR associated with this workflow run');
+              return;
+            }
+
+            const prNumber = prInfo.number;
+            const repo = context.repo.repo;
+
+            // Find the discord-review-msg-id from PR comments
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              per_page: 100
+            });
+
+            let threadId = null;
+            for (const c of comments) {
+              const match = c.body.match(/<!-- discord-review-msg-id:(\d+) -->/);
+              if (match) {
+                threadId = match[1];
+                break;
+              }
+            }
+
+            if (!threadId) {
+              console.log('No discord thread ID found for PR, skipping');
+              return;
+            }
+
+            // Get PR details for author
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+
+            const prAuthor = pr.user.login;
+
+            // GitHub username → Discord mention
+            const AGENT_MENTIONS = {
+              'PiE-Derby': '<@1477270576765735024>',
+              'volt-e': '<@1477272514332852416>',
+              'mac-executor': '`iBuild-E`',
+              'review-e-dashecorp': '<@1477785888095473798>',
+            };
+            const prAuthorMention = AGENT_MENTIONS[prAuthor] || `\`${prAuthor}\``;
+
+            const workflowName = run.name;
+            const runUrl = run.html_url;
+
+            let message;
+            if (conclusion === 'success') {
+              message = `✅ **${workflowName}** passed for ${repo} #${prNumber}\n` +
+                `[View run](${runUrl})`;
+            } else if (conclusion === 'failure') {
+              message = `${prAuthorMention} 🔴 **${workflowName}** failed for ${repo} #${prNumber}\n` +
+                `[View logs](${runUrl})\n\n` +
+                `Please investigate and push a fix, or escalate in the thread.`;
+            } else if (conclusion === 'cancelled') {
+              message = `⚪ **${workflowName}** cancelled for ${repo} #${prNumber}\n` +
+                `[View run](${runUrl})`;
+            } else {
+              console.log(`Unknown conclusion: ${conclusion}, skipping`);
+              return;
+            }
+
+            // Post to Discord thread
+            try {
+              const response = await fetch(`${webhookUrl}?thread_id=${threadId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  content: message,
+                  allowed_mentions: {
+                    parse: [],
+                    users: Object.values(AGENT_MENTIONS)
+                      .filter(m => m.startsWith('<@'))
+                      .map(m => m.replace(/<@(\d+)>/, '$1'))
+                  }
+                })
+              });
+
+              if (response.ok) {
+                console.log(`Posted ${conclusion} status for ${workflowName} to Discord thread ${threadId}`);
+              } else {
+                console.log(`Discord post failed: ${response.status}`);
+              }
+            } catch (error) {
+              console.log(`Discord error (non-fatal): ${error.message}`);
+            }
