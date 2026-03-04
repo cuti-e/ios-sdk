@@ -2,7 +2,7 @@ name: Request Review-E Review
 
 on:
   pull_request:
-    types: [opened, ready_for_review]
+    types: [opened, reopened, ready_for_review]
     branches: [main]
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Request review from Review-E
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const pr_number = context.payload.pull_request.number;
@@ -43,12 +43,13 @@ jobs:
               console.log(`Failed to request review: ${error.message}`);
             }
 
-      - name: Notify in Discord and store message ID
+      - name: Notify in Discord thread and store message ID
         if: >-
           github.event.pull_request.user.login != 'review-e-dashecorp'
         env:
           WEBHOOK_URL: ${{ secrets.REVIEW_E_DISCORD_WEBHOOK }}
-        uses: actions/github-script@v8
+          BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const webhookUrl = process.env.WEBHOOK_URL;
@@ -73,19 +74,19 @@ jobs:
             const authorMention = AGENT_MENTIONS[author] || `\`${author}\``;
             const reviewEMention = '<@1477785888095473798>';
 
-            const message = `${reviewEMention} **New PR ready for review:** ${repo} #${number}\n` +
+            // Step 1: Post notification to #tasks (no @mention — thread gets the mention)
+            const channelMessage = `**New PR ready for review:** ${repo} #${number}\n` +
               `**Title:** ${title}\n` +
               `**Author:** ${authorMention}\n` +
-              `**Link:** ${url}\n\n` +
-              `review ${repo} #${number}`;
+              `**Link:** ${url}`;
 
             try {
               const response = await fetch(`${webhookUrl}?wait=true`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  content: message,
-                  allowed_mentions: { parse: [], users: ['1477785888095473798'] }
+                  content: channelMessage,
+                  allowed_mentions: { parse: [] }
                 })
               });
 
@@ -96,9 +97,52 @@ jobs:
 
               const data = await response.json();
               const messageId = data.id;
+              const channelId = data.channel_id;
               console.log(`Discord notification sent, message ID: ${messageId}`);
 
-              // Upsert: find existing marker comment or create new one
+              // Step 2: Create thread on the notification message
+              const botToken = process.env.BOT_TOKEN;
+              if (botToken) {
+                const threadRes = await fetch(
+                  `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}/threads`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bot ${botToken}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      name: `Review: ${repo} #${number}`,
+                      auto_archive_duration: 4320
+                    })
+                  }
+                );
+
+                if (threadRes.ok) {
+                  console.log(`Thread created: Review: ${repo} #${number}`);
+
+                  // Step 3: Post @Review-E mention in the thread
+                  const threadMsg = await fetch(`${webhookUrl}?thread_id=${messageId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      content: `${reviewEMention} **Review requested**\n\nreview ${repo} #${number}`,
+                      allowed_mentions: { parse: [], users: ['1477785888095473798'] }
+                    })
+                  });
+                  if (threadMsg.ok) {
+                    console.log('Posted review request in thread');
+                  } else {
+                    console.log(`Thread message failed: ${threadMsg.status}`);
+                  }
+                } else {
+                  console.log(`Thread creation failed: ${threadRes.status}`);
+                }
+              } else {
+                console.log('No DISCORD_BOT_TOKEN, skipping thread creation');
+              }
+
+              // Step 4: Upsert Discord message ID in PR comment
               const { data: comments } = await github.rest.issues.listComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -109,7 +153,7 @@ jobs:
               const marker = comments.find(c => c.body.includes('discord-review-msg-id:'));
               const commentBody = `Discord review thread metadata (do not remove)\n` +
                 `<!-- discord-review-msg-id:${messageId} -->\n` +
-                `<!-- discord-review-channel:${data.channel_id} -->`;
+                `<!-- discord-review-channel:${channelId} -->`;
 
               if (marker) {
                 await github.rest.issues.updateComment({

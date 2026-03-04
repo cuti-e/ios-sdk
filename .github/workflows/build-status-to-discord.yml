@@ -2,7 +2,7 @@ name: Workflow Status to Discord Thread
 
 on:
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["CI", "Auto-merge Dependabot PRs"]
     types: [completed]
 
 jobs:
