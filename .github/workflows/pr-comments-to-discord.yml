@@ -1,0 +1,180 @@
+name: PR Comments to Discord Thread
+
+on:
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+  issue_comment:
+    types: [created]
+
+jobs:
+  notify-thread:
+    name: Forward to Discord Thread
+    runs-on: [self-hosted, Linux]
+    if: >-
+      github.actor != 'github-actions[bot]'
+    permissions:
+      pull-requests: read
+      issues: read
+
+    steps:
+      - name: Forward comment to Discord thread
+        env:
+          WEBHOOK_URL: ${{ secrets.REVIEW_E_DISCORD_WEBHOOK }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const webhookUrl = process.env.WEBHOOK_URL;
+            if (!webhookUrl) return;
+
+            // Determine PR number and comment details
+            let prNumber, commentBody, commentAuthor, commentType, reviewState;
+
+            if (context.eventName === 'pull_request_review') {
+              const review = context.payload.review;
+              prNumber = context.payload.pull_request.number;
+              commentBody = review.body || '';
+              commentAuthor = review.user.login;
+              reviewState = review.state; // APPROVED, CHANGES_REQUESTED, COMMENTED
+              commentType = 'review';
+
+              // Skip reviews with no body and state COMMENTED (noise)
+              if (!commentBody && reviewState === 'COMMENTED') return;
+            } else if (context.eventName === 'pull_request_review_comment') {
+              const comment = context.payload.comment;
+              prNumber = context.payload.pull_request.number;
+              commentBody = comment.body;
+              commentAuthor = comment.user.login;
+              commentType = 'review_comment';
+            } else if (context.eventName === 'issue_comment') {
+              // Only process comments on PRs
+              if (!context.payload.issue.pull_request) return;
+              const comment = context.payload.comment;
+              prNumber = context.payload.issue.number;
+              commentBody = comment.body;
+              commentAuthor = comment.user.login;
+              commentType = 'comment';
+
+              // Skip our own thread-ID comments
+              if (commentBody.includes('discord-review-msg-id')) return;
+            }
+
+            // Skip bot-generated noise (workflow comments, etc.)
+            if (commentAuthor === 'github-actions[bot]') return;
+
+            // Find the discord-review-msg-id from PR comments
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              per_page: 30
+            });
+
+            let threadId = null;
+            for (const c of comments) {
+              const match = c.body.match(/<!-- discord-review-msg-id:(\d+) -->/);
+              if (match) {
+                threadId = match[1];
+                break;
+              }
+            }
+
+            if (!threadId) {
+              console.log('No discord thread ID found for PR, skipping');
+              return;
+            }
+
+            // Get PR author for tagging
+            let prAuthor;
+            if (context.eventName === 'issue_comment') {
+              prAuthor = context.payload.issue.user.login;
+            } else {
+              prAuthor = context.payload.pull_request.user.login;
+            }
+
+            const repo = context.repo.repo;
+
+            // GitHub username → Discord mention
+            const AGENT_MENTIONS = {
+              'PiE-Derby': '<@1477270576765735024>',
+              'volt-e': '<@1477272514332852416>',
+              'mac-executor': '`iBuild-E`',
+              'review-e-dashecorp': '<@1477785888095473798>',
+            };
+
+            const COMMENT_AUTHOR_LABELS = {
+              'copilot[bot]': 'Copilot',
+              'github-advanced-security[bot]': 'Security Bot',
+              'dependabot[bot]': 'Dependabot',
+              'review-e-dashecorp': 'Review-E',
+              'PiE-Derby': 'Pi-E',
+              'volt-e': 'Volt-E',
+              'mac-executor': 'iBuild-E',
+            };
+
+            const authorLabel = COMMENT_AUTHOR_LABELS[commentAuthor] || commentAuthor;
+            const prAuthorMention = AGENT_MENTIONS[prAuthor] || `\`${prAuthor}\``;
+
+            // Build message
+            let message = '';
+            const truncatedBody = commentBody.length > 1500
+              ? commentBody.substring(0, 1500) + '...'
+              : commentBody;
+
+            if (commentType === 'review') {
+              const stateEmoji = {
+                'APPROVED': '✅',
+                'CHANGES_REQUESTED': '🔴',
+                'COMMENTED': '💬',
+              };
+              const emoji = stateEmoji[reviewState] || '💬';
+              message = `${emoji} **${authorLabel}** — ${reviewState.replace('_', ' ')}\n`;
+              if (truncatedBody) {
+                message += `\n${truncatedBody}`;
+              }
+              // Tag PR author for actionable reviews
+              if (reviewState === 'CHANGES_REQUESTED') {
+                message += `\n\n${prAuthorMention} Changes requested on ${repo} #${prNumber}`;
+              } else if (reviewState === 'APPROVED') {
+                message += `\n\n${prAuthorMention} Your PR has been approved`;
+              }
+            } else if (commentType === 'review_comment') {
+              const path = context.payload.comment.path || '';
+              const line = context.payload.comment.line || '';
+              const location = path ? `\`${path}${line ? ':' + line : ''}\`` : '';
+              message = `💬 **${authorLabel}** commented${location ? ' on ' + location : ''}:\n\n${truncatedBody}`;
+              // Tag PR author if this is from a reviewer
+              if (commentAuthor !== prAuthor) {
+                message = `${prAuthorMention} ${message}`;
+              }
+            } else {
+              message = `💬 **${authorLabel}** commented:\n\n${truncatedBody}`;
+              if (commentAuthor !== prAuthor) {
+                message = `${prAuthorMention} ${message}`;
+              }
+            }
+
+            // Post to Discord thread
+            try {
+              const response = await fetch(`${webhookUrl}?thread_id=${threadId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  content: message,
+                  allowed_mentions: {
+                    users: Object.values(AGENT_MENTIONS)
+                      .filter(m => m.startsWith('<@'))
+                      .map(m => m.replace(/<@(\d+)>/, '$1'))
+                  }
+                })
+              });
+
+              if (response.ok) {
+                console.log(`Posted ${commentType} from ${commentAuthor} to Discord thread ${threadId}`);
+              } else {
+                console.log(`Discord post failed: ${response.status}`);
+              }
+            } catch (error) {
+              console.log(`Discord error (non-fatal): ${error.message}`);
+            }
