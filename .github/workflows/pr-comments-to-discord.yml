@@ -11,7 +11,7 @@ on:
 jobs:
   notify-thread:
     name: Forward to Discord Thread
-    runs-on: [self-hosted, Linux]
+    runs-on: arc-linux-ios-sdk
     if: >-
       github.actor != 'github-actions[bot]'
     permissions:
@@ -56,8 +56,12 @@ jobs:
               commentAuthor = comment.user.login;
               commentType = 'comment';
 
-              // Skip our own thread-ID comments
+              // Skip our own marker comments
               if (commentBody.includes('discord-review-msg-id')) return;
+
+              // Skip non-collaborator comments on public repos
+              const assoc = comment.author_association;
+              if (!['OWNER', 'MEMBER', 'COLLABORATOR'].includes(assoc)) return;
             }
 
             // Skip bot-generated noise (workflow comments, etc.)
@@ -68,7 +72,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
-              per_page: 30
+              per_page: 100
             });
 
             let threadId = null;
@@ -163,6 +167,7 @@ jobs:
                 body: JSON.stringify({
                   content: message,
                   allowed_mentions: {
+                    parse: [],
                     users: Object.values(AGENT_MENTIONS)
                       .filter(m => m.startsWith('<@'))
                       .map(m => m.replace(/<@(\d+)>/, '$1'))

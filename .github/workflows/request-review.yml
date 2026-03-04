@@ -8,7 +8,7 @@ on:
 jobs:
   request-review:
     name: Request Review-E
-    runs-on: [self-hosted, Linux]
+    runs-on: arc-linux-ios-sdk
     if: >-
       !github.event.pull_request.draft &&
       github.event.pull_request.user.login != 'dependabot[bot]' &&
@@ -43,7 +43,7 @@ jobs:
               console.log(`Failed to request review: ${error.message}`);
             }
 
-      - name: Notify in Discord and store thread ID
+      - name: Notify in Discord and store message ID
         if: >-
           github.event.pull_request.user.login != 'review-e-dashecorp'
         env:
@@ -85,7 +85,7 @@ jobs:
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   content: message,
-                  allowed_mentions: { users: ['1477785888095473798'] }
+                  allowed_mentions: { parse: [], users: ['1477785888095473798'] }
                 })
               });
 
@@ -98,15 +98,36 @@ jobs:
               const messageId = data.id;
               console.log(`Discord notification sent, message ID: ${messageId}`);
 
-              // Store message ID as PR comment for ATL-E thread discovery
-              await github.rest.issues.createComment({
+              // Upsert: find existing marker comment or create new one
+              const { data: comments } = await github.rest.issues.listComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: number,
-                body: `<!-- discord-review-msg-id:${messageId} -->\n` +
-                      `<!-- discord-review-channel:1477261755125075969 -->`
+                per_page: 100
               });
-              console.log('Stored Discord thread ID in PR comment');
+
+              const marker = comments.find(c => c.body.includes('discord-review-msg-id:'));
+              const commentBody = `Discord review thread metadata (do not remove)\n` +
+                `<!-- discord-review-msg-id:${messageId} -->\n` +
+                `<!-- discord-review-channel:${data.channel_id} -->`;
+
+              if (marker) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: marker.id,
+                  body: commentBody
+                });
+                console.log('Updated existing Discord message ID in PR comment');
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: number,
+                  body: commentBody
+                });
+                console.log('Stored Discord message ID in PR comment');
+              }
             } catch (error) {
               console.log(`Discord notification error (non-fatal): ${error.message}`);
             }
