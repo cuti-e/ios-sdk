@@ -8,13 +8,14 @@ on:
 jobs:
   request-review:
     name: Request Review-E
-    runs-on: arc-linux-ios-sdk
+    runs-on: [self-hosted, Linux]
     if: >-
       !github.event.pull_request.draft &&
       github.event.pull_request.user.login != 'dependabot[bot]' &&
       !contains(github.event.pull_request.labels.*.name, 'manual-merge')
     permissions:
       pull-requests: write
+      issues: write
 
     steps:
       - name: Request review from Review-E
@@ -42,7 +43,7 @@ jobs:
               console.log(`Failed to request review: ${error.message}`);
             }
 
-      - name: Notify Review-E on Discord
+      - name: Notify in Discord and store thread ID
         if: >-
           github.event.pull_request.user.login != 'review-e-dashecorp'
         env:
@@ -52,7 +53,7 @@ jobs:
           script: |
             const webhookUrl = process.env.WEBHOOK_URL;
             if (!webhookUrl) {
-              console.log('No REVIEW_E_DISCORD_WEBHOOK secret set, skipping Discord notification');
+              console.log('No webhook secret set, skipping');
               return;
             }
 
@@ -63,27 +64,49 @@ jobs:
             const author = pr.user.login;
             const url = pr.html_url;
 
-            const message = `**New PR ready for review:** ${repo} #${number}\n` +
+            // GitHub username → Discord mention
+            const AGENT_MENTIONS = {
+              'PiE-Derby': '<@1477270576765735024>',
+              'volt-e': '<@1477272514332852416>',
+              'mac-executor': '`iBuild-E`',
+            };
+            const authorMention = AGENT_MENTIONS[author] || `\`${author}\``;
+            const reviewEMention = '<@1477785888095473798>';
+
+            const message = `${reviewEMention} **New PR ready for review:** ${repo} #${number}\n` +
               `**Title:** ${title}\n` +
-              `**Author:** ${author}\n` +
+              `**Author:** ${authorMention}\n` +
               `**Link:** ${url}\n\n` +
               `review ${repo} #${number}`;
 
             try {
-              const response = await fetch(webhookUrl, {
+              const response = await fetch(`${webhookUrl}?wait=true`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   content: message,
-                  allowed_mentions: { parse: [] }
+                  allowed_mentions: { users: ['1477785888095473798'] }
                 })
               });
 
-              if (response.ok) {
-                console.log('Discord notification sent');
-              } else {
-                console.log(`Discord notification failed: ${response.status} ${response.statusText}`);
+              if (!response.ok) {
+                console.log(`Discord notification failed: ${response.status}`);
+                return;
               }
+
+              const data = await response.json();
+              const messageId = data.id;
+              console.log(`Discord notification sent, message ID: ${messageId}`);
+
+              // Store message ID as PR comment for ATL-E thread discovery
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: number,
+                body: `<!-- discord-review-msg-id:${messageId} -->\n` +
+                      `<!-- discord-review-channel:1477261755125075969 -->`
+              });
+              console.log('Stored Discord thread ID in PR comment');
             } catch (error) {
               console.log(`Discord notification error (non-fatal): ${error.message}`);
             }
