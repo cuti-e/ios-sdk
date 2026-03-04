@@ -1,0 +1,105 @@
+name: PR Lifecycle to Discord Thread
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  notify-merged:
+    name: Post Merge Status
+    runs-on: arc-linux-ios-sdk
+    if: github.event.pull_request.merged == true
+    permissions:
+      pull-requests: read
+      issues: read
+
+    steps:
+      - name: Post merge notification to Discord thread
+        env:
+          WEBHOOK_URL: ${{ secrets.REVIEW_E_DISCORD_WEBHOOK }}
+          BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const webhookUrl = process.env.WEBHOOK_URL;
+            if (!webhookUrl) return;
+
+            const pr = context.payload.pull_request;
+            const prNumber = pr.number;
+            const repo = context.repo.repo;
+            const title = pr.title;
+            const mergedBy = pr.merged_by?.login || 'unknown';
+
+            // Find the discord-review-msg-id from PR comments
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              per_page: 100
+            });
+
+            let threadId = null;
+            for (const c of comments) {
+              const match = c.body.match(/<!-- discord-review-msg-id:(\d+) -->/);
+              if (match) {
+                threadId = match[1];
+                break;
+              }
+            }
+
+            if (!threadId) {
+              console.log('No discord thread ID found for PR, skipping');
+              return;
+            }
+
+            const message = `✅ **Merged** — ${repo} #${prNumber}\n` +
+              `**${title}**\n` +
+              `Merged by \`${mergedBy}\``;
+
+            // Post to Discord thread
+            try {
+              const response = await fetch(`${webhookUrl}?thread_id=${threadId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  content: message,
+                  allowed_mentions: { parse: [] }
+                })
+              });
+
+              if (response.ok) {
+                console.log(`Posted merge notification to Discord thread ${threadId}`);
+              } else {
+                console.log(`Discord post failed: ${response.status}`);
+              }
+
+              // Add ✅ reaction to the original notification message
+              const botToken = process.env.BOT_TOKEN;
+              if (botToken) {
+                let channelId = null;
+                for (const c of comments) {
+                  const chMatch = c.body.match(/<!-- discord-review-channel:(\d+) -->/);
+                  if (chMatch) {
+                    channelId = chMatch[1];
+                    break;
+                  }
+                }
+
+                if (channelId) {
+                  const reactRes = await fetch(
+                    `https://discord.com/api/v10/channels/${channelId}/messages/${threadId}/reactions/%E2%9C%85/@me`,
+                    {
+                      method: 'PUT',
+                      headers: { 'Authorization': `Bot ${botToken}` }
+                    }
+                  );
+                  if (reactRes.ok || reactRes.status === 204) {
+                    console.log('Added ✅ reaction to notification message');
+                  } else {
+                    console.log(`Reaction failed: ${reactRes.status}`);
+                  }
+                }
+              }
+            } catch (error) {
+              console.log(`Discord error (non-fatal): ${error.message}`);
+            }
