@@ -2,7 +2,7 @@ name: Request Review-E Review
 
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, synchronize]
     branches: [main]
 
 jobs:
@@ -18,18 +18,62 @@ jobs:
       issues: write
 
     steps:
+      - name: Determine review action
+        id: check
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const action = context.payload.action;
+            const pr_author = context.payload.pull_request.user.login;
+
+            // Never request review from self
+            if (pr_author === 'review-e-dashecorp') {
+              core.setOutput('should_request', 'false');
+              core.setOutput('is_rerequest', 'false');
+              console.log('PR author is Review-E, skipping');
+              return;
+            }
+
+            if (action === 'synchronize') {
+              // Check if Review-E has requested changes
+              const reviews = await github.paginate(
+                github.rest.pulls.listReviews,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.payload.pull_request.number,
+                  per_page: 100,
+                }
+              );
+
+              // Find latest review from Review-E
+              const reviewEReviews = reviews
+                .filter(r => r.user.login === 'review-e-dashecorp')
+                .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+
+              if (reviewEReviews.length > 0 && reviewEReviews[0].state === 'CHANGES_REQUESTED') {
+                core.setOutput('should_request', 'true');
+                core.setOutput('is_rerequest', 'true');
+                console.log('Review-E requested changes — re-requesting review');
+              } else {
+                core.setOutput('should_request', 'false');
+                core.setOutput('is_rerequest', 'false');
+                const latest = reviewEReviews[0]?.state || 'none';
+                console.log(`Synchronize but no CHANGES_REQUESTED from Review-E (latest: ${latest})`);
+              }
+            } else {
+              // opened, reopened, ready_for_review
+              core.setOutput('should_request', 'true');
+              core.setOutput('is_rerequest', 'false');
+              console.log(`Action: ${action} — requesting fresh review`);
+            }
+
       - name: Request review from Review-E
+        if: steps.check.outputs.should_request == 'true'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const pr_number = context.payload.pull_request.number;
-            const pr_author = context.payload.pull_request.user.login;
-
-            // Don't request review from self
-            if (pr_author === 'review-e-dashecorp') {
-              console.log('PR author is Review-E, skipping');
-              return;
-            }
 
             try {
               await github.rest.pulls.requestReviewers({
@@ -45,7 +89,8 @@ jobs:
 
       - name: Notify in Discord thread and store message ID
         if: >-
-          github.event.pull_request.user.login != 'review-e-dashecorp'
+          steps.check.outputs.should_request == 'true' &&
+          steps.check.outputs.is_rerequest == 'false'
         env:
           WEBHOOK_URL: ${{ secrets.REVIEW_E_DISCORD_WEBHOOK }}
           BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
@@ -171,6 +216,81 @@ jobs:
                   body: commentBody
                 });
                 console.log('Stored Discord message ID in PR comment');
+              }
+            } catch (error) {
+              console.log(`Discord notification error (non-fatal): ${error.message}`);
+            }
+
+      - name: Notify re-review in existing Discord thread
+        if: >-
+          steps.check.outputs.should_request == 'true' &&
+          steps.check.outputs.is_rerequest == 'true'
+        env:
+          WEBHOOK_URL: ${{ secrets.REVIEW_E_DISCORD_WEBHOOK }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const webhookUrl = process.env.WEBHOOK_URL;
+            if (!webhookUrl) {
+              console.log('No webhook secret set, skipping');
+              return;
+            }
+
+            const pr = context.payload.pull_request;
+            const number = pr.number;
+            const repo = context.repo.repo;
+            const reviewEMention = '<@1477785888095473798>';
+
+            // Look up Discord thread message ID from PR comments
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: number,
+              per_page: 100
+            });
+
+            const marker = comments.find(c => c.body.includes('discord-review-msg-id:'));
+
+            if (marker) {
+              const msgIdMatch = marker.body.match(/discord-review-msg-id:(\d+)/);
+              if (msgIdMatch) {
+                // Discord creates the thread on the message, so the message ID doubles as thread ID
+                const discordThreadId = msgIdMatch[1];
+                try {
+                  const response = await fetch(`${webhookUrl}?thread_id=${discordThreadId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      content: `${reviewEMention} **Changes pushed, re-review requested**\n\nreview ${repo} #${number}`,
+                      allowed_mentions: { parse: [], users: ['1477785888095473798'] }
+                    })
+                  });
+                  if (response.ok) {
+                    console.log(`Posted re-review notification in Discord thread ${discordThreadId}`);
+                  } else {
+                    console.log(`Discord thread message failed: ${response.status}`);
+                  }
+                } catch (error) {
+                  console.log(`Discord notification error (non-fatal): ${error.message}`);
+                }
+                return;
+              }
+            }
+
+            // Fallback: post to channel if no thread metadata found
+            try {
+              const response = await fetch(`${webhookUrl}?wait=true`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  content: `${reviewEMention} **Changes pushed, re-review requested:** ${repo} #${number}\n${pr.html_url}`,
+                  allowed_mentions: { parse: [], users: ['1477785888095473798'] }
+                })
+              });
+              if (response.ok) {
+                console.log('Posted re-review notification to Discord channel (no thread found)');
+              } else {
+                console.log(`Discord notification failed: ${response.status}`);
               }
             } catch (error) {
               console.log(`Discord notification error (non-fatal): ${error.message}`);
