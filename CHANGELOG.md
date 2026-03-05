@@ -5,6 +5,15 @@ All notable changes to the CutiE iOS SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1](https://github.com/cuti-e/ios-sdk/compare/2.4.0...2.4.1) (2026-03-05)
+
+
+### Bug Fixes
+
+* **ci:** replace peter-evans auto-merge with github-script ([#95](https://github.com/cuti-e/ios-sdk/issues/95)) ([eb0a53b](https://github.com/cuti-e/ios-sdk/commit/eb0a53bdba0747908e561ac9d65333528b9b1049))
+* **ci:** use self-hosted Linux runner for Review-E workflow ([#90](https://github.com/cuti-e/ios-sdk/issues/90)) ([f49d53a](https://github.com/cuti-e/ios-sdk/commit/f49d53a3ddb69d8be907b2626bd47f2e567c2015))
+* **ci:** use ubuntu-latest for Review-E workflow ([#88](https://github.com/cuti-e/ios-sdk/issues/88)) ([9c2e4f7](https://github.com/cuti-e/ios-sdk/commit/9c2e4f78b2ed9a81678ccaa09cd619aaa5da9cc4))
+
 ## [2.4.0](https://github.com/cuti-e/ios-sdk/compare/2.3.1...2.4.0) (2026-02-21)
 
 
