@@ -58,3 +58,15 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  notify-unified-docs:
+    needs: deploy
+    runs-on: arc-linux-ios-sdk
+    steps:
+      - name: Trigger unified docs rebuild
+        run: |
+          gh api repos/Stig-Johnny/claude-3/dispatches \
+            -f event_type=docs-updated \
+            -f 'client_payload[repo]=${{ github.repository }}'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
