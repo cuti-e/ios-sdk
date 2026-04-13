@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Determine review action
         id: check
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const action = context.payload.action;
@@ -70,7 +70,7 @@ jobs:
 
       - name: Request review from Review-E
         if: steps.check.outputs.should_request == 'true'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const pr_number = context.payload.pull_request.number;
@@ -94,7 +94,7 @@ jobs:
         env:
           WEBHOOK_URL: ${{ secrets.REVIEW_E_DISCORD_WEBHOOK }}
           BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const webhookUrl = process.env.WEBHOOK_URL;
@@ -227,7 +227,7 @@ jobs:
           steps.check.outputs.is_rerequest == 'true'
         env:
           WEBHOOK_URL: ${{ secrets.REVIEW_E_DISCORD_WEBHOOK }}
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const webhookUrl = process.env.WEBHOOK_URL;
