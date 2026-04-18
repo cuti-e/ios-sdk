@@ -7,7 +7,7 @@ on:
 jobs:
   notify-merged:
     name: Post Merge Status
-    runs-on: arc-linux-ios-sdk
+    runs-on: ubuntu-latest
     if: github.event.pull_request.merged == true
     permissions:
       pull-requests: read
