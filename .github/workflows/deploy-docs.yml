@@ -8,7 +8,7 @@ on:
 
 jobs:
   notify-unified-docs:
-    runs-on: arc-linux-ios-sdk
+    runs-on: ubuntu-latest
     steps:
       - name: Trigger unified docs rebuild
         run: |
