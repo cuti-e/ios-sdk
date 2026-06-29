@@ -14,7 +14,7 @@ concurrency:
 jobs:
   build:
     name: Build
-    runs-on: [self-hosted, macOS, ios]
+    runs-on: macos-26
     timeout-minutes: 10
 
     steps:
@@ -39,7 +39,7 @@ jobs:
 
   test:
     name: Test with Coverage
-    runs-on: [self-hosted, macOS, ios]
+    runs-on: macos-26
     timeout-minutes: 15
 
     steps:
@@ -89,7 +89,7 @@ jobs:
 
   docs:
     name: Build Documentation
-    runs-on: [self-hosted, macOS, ios]
+    runs-on: macos-26
     timeout-minutes: 10
 
     steps:
