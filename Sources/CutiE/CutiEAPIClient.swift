@@ -648,10 +648,30 @@ internal class CutiEAPIClient {
 
     // MARK: - Activity Ping
 
-    /// Send a fire-and-forget activity ping. Bypasses the normal request pipeline
-    /// (no ensureDeviceToken, no response decoding). All errors are silently ignored.
-    func sendActivityPing(hashedDeviceID: String) {
-        guard let url = URL(string: "\(configuration.apiURL)/v1/activity/ping") else { return }
+    /// Send an activity ping.
+    ///
+    /// Bypasses the normal request pipeline (no `ensureDeviceToken`, no response decoding),
+    /// but — unlike a true fire-and-forget call — the outcome is reported back so the SDK can
+    /// tell "delivered" apart from "refused". A transient transport error is retried **once**;
+    /// an HTTP error is never retried.
+    ///
+    /// - Parameters:
+    ///   - hashedDeviceID: Pseudonymous device hash. Never logged.
+    ///   - completion: Called once with the final outcome. May run on any queue.
+    func sendActivityPing(
+        hashedDeviceID: String,
+        completion: ((CutiEActivityPingOutcome) -> Void)? = nil
+    ) {
+        guard let request = makeActivityPingRequest(hashedDeviceID: hashedDeviceID) else {
+            completion?(.transportFailure(reason: "invalid_url"))
+            return
+        }
+
+        performActivityPing(request, retriesRemaining: 1, completion: completion)
+    }
+
+    private func makeActivityPingRequest(hashedDeviceID: String) -> URLRequest? {
+        guard let url = URL(string: "\(configuration.apiURL)/v1/activity/ping") else { return nil }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -674,9 +694,60 @@ internal class CutiEAPIClient {
         }
 
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        return request
+    }
 
-        // Fire-and-forget — ignore response and errors
-        session.dataTask(with: request) { _, _, _ in }.resume()
+    private func performActivityPing(
+        _ request: URLRequest,
+        retriesRemaining: Int,
+        completion: ((CutiEActivityPingOutcome) -> Void)?
+    ) {
+        session.dataTask(with: request) { [weak self] _, response, error in
+            if let error = error as NSError? {
+                let isTransient = Self.isTransientTransportError(error)
+                if isTransient && retriesRemaining > 0 {
+                    // Exactly one retry, after a short delay. No backoff loop.
+                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
+                        self?.performActivityPing(request, retriesRemaining: retriesRemaining - 1, completion: completion)
+                    }
+                    return
+                }
+                completion?(.transportFailure(reason: Self.transportReason(for: error)))
+                return
+            }
+
+            guard let http = response as? HTTPURLResponse else {
+                completion?(.transportFailure(reason: "no_response"))
+                return
+            }
+
+            if (200...299).contains(http.statusCode) {
+                completion?(.delivered(statusCode: http.statusCode))
+            } else {
+                completion?(.rejected(statusCode: http.statusCode))
+            }
+        }.resume()
+    }
+
+    /// Transport errors worth one retry (the network blipped, the server did not answer).
+    private static func isTransientTransportError(_ error: NSError) -> Bool {
+        guard error.domain == NSURLErrorDomain else { return false }
+        switch error.code {
+        case NSURLErrorTimedOut,
+             NSURLErrorCannotConnectToHost,
+             NSURLErrorNetworkConnectionLost,
+             NSURLErrorNotConnectedToInternet,
+             NSURLErrorDNSLookupFailed:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Stable, non-identifying reason string for diagnostics. Contains no device identifier.
+    private static func transportReason(for error: NSError) -> String {
+        guard error.domain == NSURLErrorDomain else { return "transport_error" }
+        return "urlerror_\(error.code)"
     }
 
     // MARK: - Generic Request

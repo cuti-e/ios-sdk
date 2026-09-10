@@ -14,6 +14,7 @@ Character-driven feedback platform for iOS apps. Make customer support delightfu
 - ⚡️ **Lightweight** - Minimal dependencies, small footprint
 - 🔐 **App Attest** - Enhanced device verification using Apple's secure enclave (iOS 14+)
 - 📲 **Device Linking** - Share conversation inbox across multiple devices via QR code
+- 📊 **Anonymous Analytics** - Opt-in daily activity ping (one per device per UTC day), with visible outcomes
 
 ## Architecture
 
@@ -604,6 +605,68 @@ for device in devices.devices {
 // Unlink a device
 try await CutiE.shared.unlinkDevice(deviceId)
 ```
+
+## Anonymous Activity Analytics
+
+Opt-in, consent-gated, and anonymous: the SDK sends **one activity ping per device per UTC day**
+so the dashboard can report DAU/WAU/MAU. The ping carries a SHA256 hash of
+`identifierForVendor` + bundle ID — never a raw device identifier.
+
+### Consent
+
+Analytics are **off by default**. Nothing is sent until the user opts in:
+
+```swift
+// Record the user's decision (e.g. from your own settings screen)
+CutiE.shared.setAnalyticsConsent(true)
+
+// Or present the built-in consent sheet (iOS)
+CutiE.shared.requestAnalyticsConsent(from: viewController) { granted in
+    print("Analytics consent: \(granted)")
+}
+
+CutiE.shared.analyticsEnabled            // current state
+CutiE.shared.hasAskedForAnalyticsConsent // whether the prompt was shown
+```
+
+Turning consent off stops all pings immediately.
+
+### Cadence
+
+The last ping day (UTC) is persisted in `UserDefaults`, and a ping is sent when the stored day
+differs from today. In practice that means:
+
+| Situation | Pings? |
+|-----------|--------|
+| First launch after consent is granted | ✅ |
+| Second launch the same UTC day | ❌ |
+| Launch the next UTC day | ✅ |
+| App returns to the foreground after midnight UTC (no relaunch) | ✅ |
+| Consent off | ❌ ever |
+
+This is deliberately **not** once per process launch. iOS suspends apps for days, so a daily user
+who never force-quits would otherwise never be counted.
+
+### Ping outcomes
+
+A ping is not fire-and-forget: the SDK inspects the HTTP status and records the result locally
+so your app can surface a misconfiguration (for example a rejected App ID) instead of reading
+zero active users as "nobody used the app".
+
+```swift
+let diagnostics = CutiE.shared.activityPingDiagnostics
+diagnostics.deliveredCount        // pings the server accepted (2xx)
+diagnostics.rejectedCount         // pings the server refused (4xx/5xx)
+diagnostics.transportFailureCount // pings that never reached the server
+diagnostics.lastStatusCode        // e.g. 401
+diagnostics.lastFailureReason     // e.g. "http_401" or "urlerror_-1009"
+diagnostics.lastPingDay           // e.g. "2026-03-01"
+```
+
+Failures are also written to the system log as `[CutiE] Activity ping not recorded by server (...)`
+with the status/reason only — never a device identifier. Diagnostics are local, read-only state;
+the SDK never reports analytics about analytics. A transient network error is retried **once**;
+an HTTP error is never retried, and a device pings at most once per UTC day regardless.
 
 ## Models
 

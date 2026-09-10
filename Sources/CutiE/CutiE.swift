@@ -9,7 +9,7 @@ import UIKit
 public class CutiE {
 
     /// SDK version (matches git tag)
-    internal static let sdkVersion = "2.4.1" // x-release-please-version
+    internal static let sdkVersion = "2.5.0" // x-release-please-version
 
     /// Shared singleton instance
     public static let shared = CutiE()
@@ -329,6 +329,16 @@ public class CutiE {
     /// Whether the user has already been presented with the analytics consent prompt.
     public var hasAskedForAnalyticsConsent: Bool {
         CutiEAnalytics.shared.hasBeenAsked
+    }
+
+    /// Diagnostics for the anonymous activity ping.
+    ///
+    /// Activity pings are sent at most once per UTC day per device. The outcome of each attempt
+    /// is recorded here so a host app can surface "analytics are being refused" rather than
+    /// treating silence as success. Nothing here identifies a device, and nothing is sent
+    /// anywhere — it is local, read-only state.
+    public var activityPingDiagnostics: CutiEActivityPingDiagnostics {
+        CutiEAnalytics.shared.diagnostics
     }
 
     #if os(iOS)
