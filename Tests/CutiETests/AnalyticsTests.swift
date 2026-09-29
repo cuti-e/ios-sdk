@@ -765,6 +765,24 @@ final class AnalyticsTests: XCTestCase {
         XCTAssertEqual(recorder.count, 2, "2026-03-02 is already counted")
     }
 
+    func testADayLeftInTheFutureByAClockSetAheadIsCorrected() {
+        var now = day("2030-01-01 09:00")            // the user set the clock ahead
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+
+        analytics.isEnabled = true
+        XCTAssertEqual(analytics.lastPingDay, "2030-01-01")
+
+        now = day("2026-03-01 10:00")                // clock restored
+        analytics.appDidBecomeActive()
+        XCTAssertEqual(recorder.count, 2)
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-01")
+
+        now = day("2026-03-01 12:00")
+        analytics.appDidBecomeActive()
+        XCTAssertEqual(recorder.count, 2, "Counted once today, not up to the daily cap")
+    }
+
     func testALateAnswerDoesNotClearTheNewerAttempt() {
         var now = day("2026-03-01 23:58")
         let (analytics, recorder) = makeHeldAnalytics { now }

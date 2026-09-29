@@ -29,7 +29,8 @@ public struct CutiEActivityPingDiagnostics: Equatable {
     public let lastStatusCode: Int?
     /// Non-identifying reason for the most recent failure (e.g. `http_401`, `urlerror_-1009`).
     public let lastFailureReason: String?
-    /// UTC day (`yyyy-MM-dd`) of the most recent ping the server answered, if any.
+    /// UTC day (`yyyy-MM-dd`) the device was last counted for, if any: the day of the most recent
+    /// ping the server accepted or refused for good (a 4xx other than 429).
     public let lastPingDay: String?
     /// Pings accepted by the server (2xx).
     public let deliveredCount: Int
@@ -42,7 +43,7 @@ public struct CutiEActivityPingDiagnostics: Equatable {
 /// Manages anonymous activity tracking with user consent (GDPR-compliant).
 ///
 /// A consenting device is counted **at most once per UTC day**: the day of the last ping the
-/// server *answered* is persisted in UserDefaults, so returning to a backgrounded app after
+/// server *settled* is persisted in UserDefaults, so returning to a backgrounded app after
 /// midnight UTC pings again, and a second launch on the same day does not. The hashed device ID
 /// is pseudonymized (SHA256 of identifierForVendor + bundleID). Consent is opt-in (default OFF)
 /// and persisted in UserDefaults.
@@ -247,7 +248,7 @@ internal class CutiEAnalytics {
 
     // MARK: - Activity Ping
 
-    /// UTC day of the most recent ping the server answered (`yyyy-MM-dd`), or nil if never.
+    /// UTC day of the most recent ping the server settled (`yyyy-MM-dd`), or nil if never.
     internal var lastPingDay: String? {
         UserDefaults.standard.string(forKey: lastPingDayKey)
     }
@@ -351,17 +352,20 @@ internal class CutiEAnalytics {
 
     /// Settle one attempt.
     ///
-    /// The day is marked only when the outcome settles it (see ``closesDay(_:)``), and never
-    /// moved backwards: a late answer for yesterday must not reopen today.
+    /// The day is marked only when the outcome settles it (see ``closesDay(_:)``). The current
+    /// attempt always records its day, which also corrects a marker left in the future by a clock
+    /// that was set ahead. A superseded attempt may only move the day forward: a late answer for
+    /// yesterday must not reopen today.
     private func finishPing(_ outcome: CutiEActivityPingOutcome, day: String, attemptID: UUID) {
         stateLock.lock()
-        if currentAttemptID == attemptID {
+        let isCurrent = currentAttemptID == attemptID
+        if isCurrent {
             currentAttemptID = nil
             pingInFlightSince = nil
         }
         // yyyy-MM-dd strings order the same way as the days they name.
         if Self.closesDay(outcome),
-           (UserDefaults.standard.string(forKey: lastPingDayKey) ?? "") < day {
+           isCurrent || (UserDefaults.standard.string(forKey: lastPingDayKey) ?? "") < day {
             UserDefaults.standard.set(day, forKey: lastPingDayKey)
         }
         stateLock.unlock()
