@@ -331,6 +331,16 @@ public class CutiE {
         CutiEAnalytics.shared.hasBeenAsked
     }
 
+    /// Diagnostics for the anonymous activity ping.
+    ///
+    /// Activity pings are sent at most once per UTC day per device. The outcome of each attempt
+    /// is recorded here so a host app can surface "analytics are being refused" rather than
+    /// treating silence as success. Nothing here identifies a device, and nothing is sent
+    /// anywhere — it is local, read-only state.
+    public var activityPingDiagnostics: CutiEActivityPingDiagnostics {
+        CutiEAnalytics.shared.diagnostics
+    }
+
     #if os(iOS)
     /// Present a consent sheet asking the user to opt in to anonymous activity tracking.
     /// - Parameters:

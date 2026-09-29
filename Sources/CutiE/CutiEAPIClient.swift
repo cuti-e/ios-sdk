@@ -648,10 +648,49 @@ internal class CutiEAPIClient {
 
     // MARK: - Activity Ping
 
-    /// Send a fire-and-forget activity ping. Bypasses the normal request pipeline
-    /// (no ensureDeviceToken, no response decoding). All errors are silently ignored.
-    func sendActivityPing(hashedDeviceID: String) {
-        guard let url = URL(string: "\(configuration.apiURL)/v1/activity/ping") else { return }
+    /// Send an activity ping.
+    ///
+    /// Bypasses the normal request pipeline (no `ensureDeviceToken`, no response decoding),
+    /// but — unlike a true fire-and-forget call — the outcome is reported back so the SDK can
+    /// tell "delivered" apart from "refused". A transient transport error is retried **once**;
+    /// an HTTP error is never retried.
+    ///
+    /// - Parameters:
+    ///   - hashedDeviceID: Pseudonymous device hash. Never logged.
+    ///   - mayRetry: Asked just before the retry is sent. Returning false (consent was withdrawn
+    ///     while the retry waited) ends the attempt without sending anything more.
+    ///   - completion: Called exactly once with the final outcome. May run on any queue.
+    func sendActivityPing(
+        hashedDeviceID: String,
+        mayRetry: @escaping () -> Bool = { true },
+        completion: ((CutiEActivityPingOutcome) -> Void)? = nil
+    ) {
+        guard let request = makeActivityPingRequest(hashedDeviceID: hashedDeviceID) else {
+            completion?(.transportFailure(reason: "invalid_url"))
+            return
+        }
+
+        // Capture the session, not the client, so the attempt still completes if a second
+        // configure() replaces the client while the retry waits.
+        let session = self.session
+        Self.runActivityPing(
+            send: { finish in
+                session.dataTask(with: request) { _, response, error in
+                    finish(response, error)
+                }.resume()
+            },
+            retriesRemaining: 1,
+            retryDelay: Self.activityPingRetryDelay,
+            mayRetry: mayRetry,
+            completion: completion
+        )
+    }
+
+    /// Wait before the single retry of a transient transport failure.
+    internal static let activityPingRetryDelay: TimeInterval = 2
+
+    private func makeActivityPingRequest(hashedDeviceID: String) -> URLRequest? {
+        guard let url = URL(string: "\(configuration.apiURL)/v1/activity/ping") else { return nil }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -674,9 +713,76 @@ internal class CutiEAPIClient {
         }
 
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        return request
+    }
 
-        // Fire-and-forget — ignore response and errors
-        session.dataTask(with: request) { _, _, _ in }.resume()
+    /// The retry policy on its own, so it can be tested without a network. `send` performs one
+    /// request and hands back its response or error.
+    internal static func runActivityPing(
+        send: @escaping (@escaping (URLResponse?, Error?) -> Void) -> Void,
+        retriesRemaining: Int,
+        retryDelay: TimeInterval,
+        mayRetry: @escaping () -> Bool,
+        completion: ((CutiEActivityPingOutcome) -> Void)?
+    ) {
+        send { response, error in
+            if let error = error as NSError? {
+                let reason = Self.transportReason(for: error)
+                guard Self.isTransientTransportError(error) && retriesRemaining > 0 else {
+                    completion?(.transportFailure(reason: reason))
+                    return
+                }
+                // Exactly one retry, after a short delay. No backoff loop.
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + retryDelay) {
+                    // Consent can be withdrawn while the retry waits, and nothing may be sent
+                    // after that.
+                    guard mayRetry() else {
+                        completion?(.transportFailure(reason: reason))
+                        return
+                    }
+                    Self.runActivityPing(
+                        send: send,
+                        retriesRemaining: retriesRemaining - 1,
+                        retryDelay: retryDelay,
+                        mayRetry: mayRetry,
+                        completion: completion
+                    )
+                }
+                return
+            }
+
+            guard let http = response as? HTTPURLResponse else {
+                completion?(.transportFailure(reason: "no_response"))
+                return
+            }
+
+            if (200...299).contains(http.statusCode) {
+                completion?(.delivered(statusCode: http.statusCode))
+            } else {
+                completion?(.rejected(statusCode: http.statusCode))
+            }
+        }
+    }
+
+    /// Transport errors worth one retry (the network blipped, the server did not answer).
+    private static func isTransientTransportError(_ error: NSError) -> Bool {
+        guard error.domain == NSURLErrorDomain else { return false }
+        switch error.code {
+        case NSURLErrorTimedOut,
+             NSURLErrorCannotConnectToHost,
+             NSURLErrorNetworkConnectionLost,
+             NSURLErrorNotConnectedToInternet,
+             NSURLErrorDNSLookupFailed:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Stable, non-identifying reason string for diagnostics. Contains no device identifier.
+    private static func transportReason(for error: NSError) -> String {
+        guard error.domain == NSURLErrorDomain else { return "transport_error" }
+        return "urlerror_\(error.code)"
     }
 
     // MARK: - Generic Request

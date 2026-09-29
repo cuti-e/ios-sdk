@@ -6,6 +6,10 @@ final class AnalyticsTests: XCTestCase {
     override func setUp() {
         super.setUp()
         CutiEAnalytics.shared.resetForTesting()
+        // Every test in this file runs against a fake transport: no test touches the network.
+        CutiEAnalytics.shared.pingTransportOverride = { _, completion in
+            completion(.delivered(statusCode: 204))
+        }
     }
 
     override func tearDown() {
@@ -93,19 +97,457 @@ final class AnalyticsTests: XCTestCase {
     // MARK: - Safety Without Configuration
 
     func testNoCrashWithoutConfiguration() {
-        // Ensure SDK is not configured
+        // Ensure SDK is not configured, and take the real transport path: setUp's fake transport
+        // would otherwise answer before the missing client is ever noticed.
         let savedConfig = CutiE.shared.configuration
         let savedClient = CutiE.shared.apiClient
         CutiE.shared.configuration = nil
         CutiE.shared.apiClient = nil
+        CutiEAnalytics.shared.pingTransportOverride = nil
 
-        // Enable analytics and trigger ping — should not crash
+        // Enable analytics and trigger ping — should not crash, and must not spend an attempt
         CutiEAnalytics.shared.isEnabled = true
         CutiEAnalytics.shared.sendActivityPingIfNeeded()
+        XCTAssertNil(CutiEAnalytics.shared.diagnostics.lastAttemptDate)
+        XCTAssertFalse(CutiEAnalytics.shared.isPingInFlight)
 
         // Restore
         CutiE.shared.configuration = savedConfig
         CutiE.shared.apiClient = savedClient
+    }
+
+    // MARK: - Daily Ping Cadence (once per UTC day, not once per launch)
+
+    /// Fake transport: records every hashed ID it is asked to send, hits no network.
+    private final class PingRecorder {
+        private(set) var sentHashes: [String] = []
+        var outcome: CutiEActivityPingOutcome = .delivered(statusCode: 204)
+
+        var transport: (String, @escaping (CutiEActivityPingOutcome) -> Void) -> Void {
+            return { [weak self] hashedID, completion in
+                self?.sentHashes.append(hashedID)
+                completion(self?.outcome ?? .delivered(statusCode: 204))
+            }
+        }
+
+        var count: Int { sentHashes.count }
+    }
+
+    private func day(_ iso: String) -> Date {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        guard let date = formatter.date(from: iso) else {
+            XCTFail("Bad fixture date \(iso)")
+            return Date()
+        }
+        return date
+    }
+
+    /// Arrange a consented, configured SDK with a fake clock and fake transport.
+    private func makeConsentedAnalytics(at date: Date) -> (CutiEAnalytics, PingRecorder) {
+        CutiE.shared.configure(appId: "app_test", apiURL: "https://test.api.com")
+        let analytics = CutiEAnalytics.shared
+        let recorder = PingRecorder()
+        analytics.dateProvider = { date }
+        analytics.pingTransportOverride = recorder.transport
+        return (analytics, recorder)
+    }
+
+    func testFirstLaunchWithConsentSendsPing() {
+        let now = day("2026-03-01 09:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+
+        analytics.isEnabled = true // consent granted -> pings immediately
+
+        XCTAssertEqual(recorder.count, 1, "A consented first launch must ping")
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-01")
+    }
+
+    func testSecondLaunchSameDayDoesNotPing() {
+        let now = day("2026-03-01 09:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+
+        analytics.isEnabled = true
+        XCTAssertEqual(recorder.count, 1)
+
+        // Simulate a fresh process launch on the same UTC day: consent is already persisted,
+        // configure() runs again, onSDKConfigured() fires.
+        analytics.onSDKConfigured()
+        analytics.sendActivityPingIfNeeded()
+
+        XCTAssertEqual(recorder.count, 1, "Same UTC day must not ping twice")
+    }
+
+    func testNextDayLaunchSendsPing() {
+        var now = day("2026-03-01 22:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+
+        analytics.isEnabled = true
+        XCTAssertEqual(recorder.count, 1)
+
+        // Next UTC day, new launch
+        now = day("2026-03-02 08:00")
+        analytics.onSDKConfigured()
+
+        XCTAssertEqual(recorder.count, 2, "A new UTC day must ping again")
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-02")
+    }
+
+    func testForegroundAfterMidnightUTCSendsPing() {
+        var now = day("2026-03-01 23:50")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+
+        analytics.isEnabled = true
+        XCTAssertEqual(recorder.count, 1)
+
+        // App is backgrounded, never force-quit, and resumed 20 minutes later — next UTC day.
+        now = day("2026-03-02 00:10")
+        analytics.appDidBecomeActive()
+
+        XCTAssertEqual(recorder.count, 2, "Returning to foreground after midnight UTC must ping")
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-02")
+    }
+
+    func testForegroundSameDayDoesNotPing() {
+        var now = day("2026-03-01 10:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+
+        analytics.isEnabled = true
+        now = day("2026-03-01 18:00")
+        analytics.appDidBecomeActive()
+        analytics.appDidBecomeActive()
+
+        XCTAssertEqual(recorder.count, 1, "At most one ping per device per UTC day")
+    }
+
+    func testConsentOffNeverPings() {
+        var now = day("2026-03-01 10:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+
+        XCTAssertFalse(analytics.isEnabled)
+        analytics.sendActivityPingIfNeeded()
+        analytics.onSDKConfigured()
+        analytics.appDidBecomeActive()
+
+        now = day("2026-03-05 10:00")
+        analytics.sendActivityPingIfNeeded()
+        analytics.appDidBecomeActive()
+
+        XCTAssertEqual(recorder.count, 0, "No consent means no ping, ever")
+        XCTAssertNil(analytics.lastPingDay)
+    }
+
+    func testConsentWithdrawalStopsFuturePings() {
+        var now = day("2026-03-01 10:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+
+        analytics.isEnabled = true
+        XCTAssertEqual(recorder.count, 1)
+
+        analytics.isEnabled = false
+        now = day("2026-03-02 10:00")
+        analytics.appDidBecomeActive()
+        analytics.sendActivityPingIfNeeded()
+
+        XCTAssertEqual(recorder.count, 1, "Withdrawn consent must stop the daily ping")
+    }
+
+    func testForegroundObserverIsRegisteredWhenConsentGranted() {
+        let now = day("2026-03-01 10:00")
+        let (analytics, _) = makeConsentedAnalytics(at: now)
+
+        XCTAssertFalse(analytics.isObserving)
+        analytics.isEnabled = true
+        XCTAssertTrue(analytics.isObserving, "Foreground observer must be live while consent is on")
+
+        analytics.isEnabled = false
+        XCTAssertFalse(analytics.isObserving)
+    }
+
+    func testUTCDayStringUsesUTCNotLocalTime() {
+        // 23:30 UTC on 1 March is already 2 March in, e.g., CET+2 — the day must stay UTC.
+        let date = day("2026-03-01 23:30")
+        XCTAssertEqual(CutiEAnalytics.utcDayString(from: date), "2026-03-01")
+    }
+
+    // MARK: - Ping Outcome Recording
+
+    func testDeliveredPingIsCountedAsDelivered() {
+        let now = day("2026-03-01 10:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        recorder.outcome = .delivered(statusCode: 204)
+
+        analytics.isEnabled = true
+
+        let diagnostics = analytics.diagnostics
+        XCTAssertEqual(diagnostics.deliveredCount, 1)
+        XCTAssertEqual(diagnostics.rejectedCount, 0)
+        XCTAssertEqual(diagnostics.lastStatusCode, 204)
+        XCTAssertNil(diagnostics.lastFailureReason)
+    }
+
+    func testRejectedPingIsRecordedNotSwallowed() {
+        let now = day("2026-03-01 10:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        recorder.outcome = .rejected(statusCode: 401)
+
+        analytics.isEnabled = true
+
+        let diagnostics = analytics.diagnostics
+        XCTAssertEqual(diagnostics.rejectedCount, 1)
+        XCTAssertEqual(diagnostics.deliveredCount, 0)
+        XCTAssertEqual(diagnostics.lastStatusCode, 401)
+        XCTAssertEqual(diagnostics.lastFailureReason, "http_401")
+        XCTAssertNotNil(diagnostics.lastAttemptDate)
+    }
+
+    func testTransportFailureIsRecorded() {
+        let now = day("2026-03-01 10:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        recorder.outcome = .transportFailure(reason: "urlerror_-1009")
+
+        analytics.isEnabled = true
+
+        let diagnostics = analytics.diagnostics
+        XCTAssertEqual(diagnostics.transportFailureCount, 1)
+        XCTAssertNil(diagnostics.lastStatusCode)
+        XCTAssertEqual(diagnostics.lastFailureReason, "urlerror_-1009")
+    }
+
+    func testDiagnosticsNeverContainTheHashedDeviceID() {
+        let now = day("2026-03-01 10:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        recorder.outcome = .rejected(statusCode: 403)
+
+        analytics.isEnabled = true
+
+        let hashedID = analytics.generateHashedDeviceID()
+        let diagnostics = analytics.diagnostics
+        XCTAssertFalse(hashedID.isEmpty)
+        XCTAssertNotEqual(diagnostics.lastFailureReason, hashedID)
+        XCTAssertFalse(diagnostics.lastFailureReason?.contains(hashedID) ?? false)
+    }
+
+    func testDiagnosticsAreExposedOnPublicAPI() {
+        let now = day("2026-03-01 10:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        recorder.outcome = .rejected(statusCode: 500)
+
+        analytics.isEnabled = true
+
+        XCTAssertEqual(CutiE.shared.activityPingDiagnostics.rejectedCount, 1)
+        XCTAssertEqual(CutiE.shared.activityPingDiagnostics.lastStatusCode, 500)
+    }
+
+    // MARK: - A Failed Attempt Must Not Cost the Device Its Day
+
+    func testTransportFailureLeavesTheDayOpenForALaterForeground() {
+        var now = day("2026-03-01 08:05")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+        recorder.outcome = .transportFailure(reason: "urlerror_-1009")
+
+        analytics.isEnabled = true
+        XCTAssertEqual(recorder.count, 1)
+        XCTAssertNil(analytics.lastPingDay, "Nothing reached the server, so the day is not spent")
+
+        // Back on Wi-Fi later the same day.
+        now = day("2026-03-01 12:00")
+        recorder.outcome = .delivered(statusCode: 204)
+        analytics.appDidBecomeActive()
+
+        XCTAssertEqual(recorder.count, 2, "A day whose only attempt failed must be re-attempted")
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-01")
+    }
+
+    func testFailedAttemptIsNotRetriedImmediately() {
+        var now = day("2026-03-01 08:05")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+        recorder.outcome = .transportFailure(reason: "urlerror_-1009")
+
+        analytics.isEnabled = true
+        XCTAssertEqual(recorder.count, 1)
+
+        // Still offline, app foregrounded again a minute later: inside the cooldown.
+        now = day("2026-03-01 08:06")
+        analytics.appDidBecomeActive()
+        analytics.appDidBecomeActive()
+
+        XCTAssertEqual(recorder.count, 1, "Re-attempts wait out the cooldown — no retry storm")
+    }
+
+    func testAttemptsAreCappedPerDay() {
+        var now = day("2026-03-01 00:10")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+        recorder.outcome = .transportFailure(reason: "urlerror_-1009")
+
+        analytics.isEnabled = true
+
+        // Foreground once an hour all day, offline the whole time.
+        for hour in 1...20 {
+            now = day(String(format: "2026-03-01 %02d:10", hour))
+            analytics.appDidBecomeActive()
+        }
+
+        XCTAssertEqual(recorder.count, CutiEAnalytics.maxAttemptsPerDay,
+                       "A device that can never reach the server must stop trying for the day")
+
+        // A new UTC day resets the budget.
+        now = day("2026-03-02 09:00")
+        recorder.outcome = .delivered(statusCode: 204)
+        analytics.appDidBecomeActive()
+
+        XCTAssertEqual(recorder.count, CutiEAnalytics.maxAttemptsPerDay + 1)
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-02")
+    }
+
+    func testRefusedPingStillSpendsTheDay() {
+        var now = day("2026-03-01 09:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+        recorder.outcome = .rejected(statusCode: 401)
+
+        analytics.isEnabled = true
+        XCTAssertEqual(recorder.count, 1)
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-01",
+                       "The server answered and counted the refusal — do not ask again today")
+
+        now = day("2026-03-01 20:00")
+        analytics.appDidBecomeActive()
+        XCTAssertEqual(recorder.count, 1)
+    }
+
+    // MARK: - A Background Wake Is Not a Use
+
+    func testBackgroundLaunchDoesNotPing() {
+        var now = day("2026-03-01 03:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+
+        analytics.isEnabled = true               // consent granted in the foreground, day is spent
+        XCTAssertEqual(recorder.count, 1)
+
+        // Next day: a silent push wakes the app at 03:00. Nobody opened it.
+        now = day("2026-03-02 03:00")
+        analytics.isInBackgroundProvider = { true }
+        analytics.onSDKConfigured()
+
+        XCTAssertEqual(recorder.count, 1, "A background wake must not report a daily active user")
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-01")
+
+        // The human opens it later that day.
+        now = day("2026-03-02 08:30")
+        analytics.isInBackgroundProvider = { false }
+        analytics.appDidBecomeActive()
+
+        XCTAssertEqual(recorder.count, 2)
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-02")
+    }
+
+    func testForegroundLaunchStillPings() {
+        let now = day("2026-03-01 09:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.isInBackgroundProvider = { false }
+
+        UserDefaults.standard.set(true, forKey: "com.cutie.analyticsConsent")
+        analytics.onSDKConfigured()
+
+        XCTAssertEqual(recorder.count, 1, "A normal foreground launch must still ping")
+    }
+
+    // MARK: - The Observer Is Really Wired Up
+
+    /// Posting the notification the SDK claims to observe must produce a ping. This fails if the
+    /// registration is deleted, renamed, or points at the wrong notification — a Bool cannot.
+    func testPostingTheForegroundNotificationSendsPing() {
+        var now = day("2026-03-01 23:50")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+
+        analytics.isEnabled = true
+        XCTAssertEqual(recorder.count, 1)
+
+        now = day("2026-03-02 00:10")
+        NotificationCenter.default.post(name: CutiEAnalytics.didBecomeActiveNotification, object: nil)
+
+        XCTAssertEqual(recorder.count, 2, "The observed notification must actually reach the ping")
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-02")
+    }
+
+    func testWithdrawnConsentUnregistersTheObserver() {
+        var now = day("2026-03-01 10:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+
+        analytics.isEnabled = true
+        analytics.isEnabled = false
+
+        now = day("2026-03-02 10:00")
+        NotificationCenter.default.post(name: CutiEAnalytics.didBecomeActiveNotification, object: nil)
+
+        XCTAssertEqual(recorder.count, 1, "A removed observer must not still fire")
+    }
+
+    // MARK: - Concurrency
+
+    /// Thread-safe recorder that holds the completion open, so "in flight" is observable.
+    private final class ConcurrentPingRecorder {
+        private let lock = NSLock()
+        private var pending: [(CutiEActivityPingOutcome) -> Void] = []
+        private var sent = 0
+
+        var transport: (String, @escaping (CutiEActivityPingOutcome) -> Void) -> Void {
+            return { [weak self] _, completion in
+                guard let self = self else { return }
+                self.lock.lock()
+                self.sent += 1
+                self.pending.append(completion)
+                self.lock.unlock()
+            }
+        }
+
+        var count: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return sent
+        }
+
+        func completeAll(_ outcome: CutiEActivityPingOutcome) {
+            lock.lock()
+            let waiting = pending
+            pending = []
+            lock.unlock()
+            waiting.forEach { $0(outcome) }
+        }
+    }
+
+    func testConcurrentCallersSendAtMostOnePing() {
+        let now = day("2026-03-01 09:00")
+        CutiE.shared.configure(appId: "app_test", apiURL: "https://test.api.com")
+        let analytics = CutiEAnalytics.shared
+        let recorder = ConcurrentPingRecorder()
+        analytics.dateProvider = { now }
+        analytics.pingTransportOverride = recorder.transport
+        UserDefaults.standard.set(true, forKey: "com.cutie.analyticsConsent")
+
+        // configure() on a background queue racing didBecomeActive on another.
+        DispatchQueue.concurrentPerform(iterations: 16) { _ in
+            analytics.sendActivityPingIfNeeded()
+        }
+
+        XCTAssertEqual(recorder.count, 1, "One device-day is one network call, whatever the queue")
+
+        recorder.completeAll(.delivered(statusCode: 204))
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-01")
     }
 
     func testNoPingWithoutConsent() {
@@ -116,5 +558,259 @@ final class AnalyticsTests: XCTestCase {
         // (we can't easily verify no network call, but at least no crash)
         CutiEAnalytics.shared.sendActivityPingIfNeeded()
         XCTAssertFalse(CutiEAnalytics.shared.isEnabled)
+    }
+
+    // MARK: - Transport Retry Policy (no network)
+
+    private func http(_ status: Int) -> HTTPURLResponse {
+        HTTPURLResponse(
+            url: URL(string: "https://test.api.com/v1/activity/ping")!,
+            statusCode: status,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+    }
+
+    private func urlError(_ code: Int) -> NSError {
+        NSError(domain: NSURLErrorDomain, code: code)
+    }
+
+    /// Run the real retry policy against scripted results. Returns every outcome handed to the
+    /// completion (the contract is exactly one) and the number of requests sent.
+    private func runScriptedPing(
+        _ results: [(URLResponse?, Error?)],
+        mayRetry: @escaping () -> Bool = { true }
+    ) -> (outcomes: [CutiEActivityPingOutcome], sends: Int) {
+        let lock = NSLock()
+        var script = results
+        var sends = 0
+        var outcomes: [CutiEActivityPingOutcome] = []
+        let settled = expectation(description: "ping settled")
+
+        CutiEAPIClient.runActivityPing(
+            send: { finish in
+                lock.lock()
+                sends += 1
+                let next: (URLResponse?, Error?) = script.isEmpty
+                    ? (nil, self.urlError(NSURLErrorUnknown))
+                    : script.removeFirst()
+                lock.unlock()
+                finish(next.0, next.1)
+            },
+            retriesRemaining: 1,
+            retryDelay: 0,
+            mayRetry: mayRetry,
+            completion: { outcome in
+                lock.lock()
+                outcomes.append(outcome)
+                let first = outcomes.count == 1
+                lock.unlock()
+                if first { settled.fulfill() }
+            }
+        )
+
+        wait(for: [settled], timeout: 2)
+        // Leave room for a second completion to show up, so "exactly once" is really checked.
+        Thread.sleep(forTimeInterval: 0.2)
+        lock.lock()
+        defer { lock.unlock() }
+        return (outcomes, sends)
+    }
+
+    func testTransientFailureIsRetriedOnce() {
+        let result = runScriptedPing([(nil, urlError(NSURLErrorTimedOut)), (http(204), nil)])
+
+        XCTAssertEqual(result.sends, 2)
+        XCTAssertEqual(result.outcomes.count, 1, "The completion runs exactly once")
+        guard case .delivered(let status)? = result.outcomes.first else {
+            return XCTFail("Expected delivered, got \(String(describing: result.outcomes.first))")
+        }
+        XCTAssertEqual(status, 204)
+    }
+
+    func testSecondTransientFailureIsNotRetriedAgain() {
+        let result = runScriptedPing([
+            (nil, urlError(NSURLErrorTimedOut)),
+            (nil, urlError(NSURLErrorTimedOut)),
+            (http(204), nil),
+        ])
+
+        XCTAssertEqual(result.sends, 2, "Exactly one retry, no loop")
+        XCTAssertEqual(result.outcomes.count, 1)
+        guard case .transportFailure(let reason)? = result.outcomes.first else {
+            return XCTFail("Expected a transport failure, got \(String(describing: result.outcomes.first))")
+        }
+        XCTAssertEqual(reason, "urlerror_\(NSURLErrorTimedOut)")
+    }
+
+    func testHTTPErrorIsNeverRetried() {
+        let result = runScriptedPing([(http(503), nil), (http(204), nil)])
+
+        XCTAssertEqual(result.sends, 1)
+        XCTAssertEqual(result.outcomes.count, 1)
+        guard case .rejected(let status)? = result.outcomes.first else {
+            return XCTFail("Expected rejected, got \(String(describing: result.outcomes.first))")
+        }
+        XCTAssertEqual(status, 503)
+    }
+
+    func testNonTransientTransportErrorIsNotRetried() {
+        let result = runScriptedPing([(nil, urlError(NSURLErrorCancelled)), (http(204), nil)])
+
+        XCTAssertEqual(result.sends, 1)
+        XCTAssertEqual(result.outcomes.count, 1)
+        guard case .transportFailure? = result.outcomes.first else {
+            return XCTFail("Expected a transport failure, got \(String(describing: result.outcomes.first))")
+        }
+    }
+
+    func testRetryIsDroppedOnceConsentIsWithdrawn() {
+        // Consent was withdrawn while the retry waited, so nothing more may be sent.
+        let result = runScriptedPing(
+            [(nil, urlError(NSURLErrorTimedOut)), (http(204), nil)],
+            mayRetry: { false }
+        )
+
+        XCTAssertEqual(result.sends, 1, "No request after opt-out")
+        XCTAssertEqual(result.outcomes.count, 1)
+        guard case .transportFailure? = result.outcomes.first else {
+            return XCTFail("Expected a transport failure, got \(String(describing: result.outcomes.first))")
+        }
+    }
+
+    // MARK: - Consent Re-applied at a Background Launch
+
+    func testConsentReappliedDuringABackgroundLaunchDoesNotPing() {
+        var now = day("2026-03-01 03:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+        analytics.isInBackgroundProvider = { true }
+
+        // Apps often re-apply stored consent at launch, and a launch can be a silent push.
+        CutiE.shared.setAnalyticsConsent(true)
+        XCTAssertEqual(recorder.count, 0, "A background launch is not a use, however consent is set")
+
+        now = day("2026-03-01 08:00")
+        analytics.isInBackgroundProvider = { false }
+        analytics.appDidBecomeActive()
+        XCTAssertEqual(recorder.count, 1)
+    }
+
+    // MARK: - 429 and 5xx Leave the Day Open
+
+    func testServerErrorsLeaveTheDayOpen() {
+        for status in [429, 500, 503] {
+            CutiEAnalytics.shared.resetForTesting()
+            var now = day("2026-03-01 09:00")
+            let (analytics, recorder) = makeConsentedAnalytics(at: now)
+            analytics.dateProvider = { now }
+            recorder.outcome = .rejected(statusCode: status)
+
+            analytics.isEnabled = true
+            XCTAssertEqual(recorder.count, 1)
+            XCTAssertNil(analytics.lastPingDay, "HTTP \(status) stored nothing, so the day stays open")
+            XCTAssertEqual(analytics.diagnostics.rejectedCount, 1, "HTTP \(status) is still reported")
+
+            now = day("2026-03-01 12:00")
+            recorder.outcome = .delivered(statusCode: 204)
+            analytics.appDidBecomeActive()
+            XCTAssertEqual(recorder.count, 2, "HTTP \(status): the device re-attempts later that day")
+            XCTAssertEqual(analytics.lastPingDay, "2026-03-01")
+        }
+    }
+
+    // MARK: - Late Completions
+
+    /// Fake transport that holds every completion until the test releases it, in any order.
+    private final class HeldPingRecorder {
+        private(set) var completions: [(CutiEActivityPingOutcome) -> Void] = []
+
+        var transport: (String, @escaping (CutiEActivityPingOutcome) -> Void) -> Void {
+            return { [weak self] _, completion in
+                self?.completions.append(completion)
+            }
+        }
+
+        var count: Int { completions.count }
+    }
+
+    private func makeHeldAnalytics(_ now: @escaping () -> Date) -> (CutiEAnalytics, HeldPingRecorder) {
+        CutiE.shared.configure(appId: "app_test", apiURL: "https://test.api.com")
+        let analytics = CutiEAnalytics.shared
+        let recorder = HeldPingRecorder()
+        analytics.dateProvider = now
+        analytics.pingTransportOverride = recorder.transport
+        return (analytics, recorder)
+    }
+
+    func testALateAnswerForYesterdayDoesNotReopenToday() {
+        var now = day("2026-03-01 23:59")
+        let (analytics, recorder) = makeHeldAnalytics { now }
+
+        analytics.isEnabled = true                    // attempt A, for 2026-03-01, stalls
+        XCTAssertEqual(recorder.count, 1)
+
+        now = day("2026-03-02 00:01")                 // A is presumed lost
+        analytics.appDidBecomeActive()                // attempt B, for 2026-03-02
+        XCTAssertEqual(recorder.count, 2)
+
+        recorder.completions[1](.delivered(statusCode: 204))    // B answers first
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-02")
+
+        recorder.completions[0](.delivered(statusCode: 204))    // A answers late
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-02", "A late answer must not move the day back")
+
+        now = day("2026-03-02 00:20")
+        analytics.appDidBecomeActive()
+        XCTAssertEqual(recorder.count, 2, "2026-03-02 is already counted")
+    }
+
+    func testADayLeftInTheFutureByAClockSetAheadIsCorrected() {
+        var now = day("2030-01-01 09:00")            // the user set the clock ahead
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+
+        analytics.isEnabled = true
+        XCTAssertEqual(analytics.lastPingDay, "2030-01-01")
+
+        now = day("2026-03-01 10:00")                // clock restored
+        analytics.appDidBecomeActive()
+        XCTAssertEqual(recorder.count, 2)
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-01")
+
+        now = day("2026-03-01 12:00")
+        analytics.appDidBecomeActive()
+        XCTAssertEqual(recorder.count, 2, "Counted once today, not up to the daily cap")
+    }
+
+    func testALateAnswerDoesNotClearTheNewerAttempt() {
+        var now = day("2026-03-01 23:58")
+        let (analytics, recorder) = makeHeldAnalytics { now }
+
+        analytics.isEnabled = true                    // attempt A stalls
+        now = day("2026-03-02 00:00")                 // A is presumed lost
+        analytics.appDidBecomeActive()                // attempt B starts
+        XCTAssertEqual(recorder.count, 2)
+
+        recorder.completions[0](.transportFailure(reason: "urlerror_-1001"))    // A gives up late
+        XCTAssertTrue(analytics.isPingInFlight, "B is still on its way")
+    }
+
+    func testOnlyOneRequestAtATimeAcrossMidnight() {
+        // The previous day's request is still pending when the new UTC day starts. The cooldown
+        // does not carry over to a new day, so only the in-flight marker holds the second request.
+        var now = day("2026-03-01 23:59").addingTimeInterval(40)
+        let (analytics, recorder) = makeHeldAnalytics { now }
+
+        analytics.isEnabled = true                    // attempt A, pending
+        XCTAssertEqual(recorder.count, 1)
+
+        now = day("2026-03-02 00:00").addingTimeInterval(10)    // 30 s later, a new UTC day
+        analytics.appDidBecomeActive()
+        XCTAssertEqual(recorder.count, 1, "One request at a time, even across midnight")
+
+        now = day("2026-03-02 00:01").addingTimeInterval(10)    // 90 s after A: presumed lost
+        analytics.appDidBecomeActive()
+        XCTAssertEqual(recorder.count, 2)
     }
 }
