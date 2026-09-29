@@ -643,15 +643,17 @@ differs from today. In practice that means:
 | Launch the next UTC day | ✅ |
 | App returns to the foreground after midnight UTC (no relaunch) | ✅ |
 | Attempt failed offline, app foregrounded again later that day | ✅ (re-attempt) |
+| Server answered 429 or 5xx, app foregrounded again later that day | ✅ (re-attempt) |
 | Background wake (background fetch, silent push) with no human | ❌ |
 | Consent off | ❌ ever |
 
 This is deliberately **not** once per process launch. iOS suspends apps for days, so a daily user
 who never force-quits would otherwise never be counted.
 
-The day is marked as counted only once the **server has answered** — accepted or refused. A ping
-that never reached the network (train, lift, captive Wi-Fi) does not spend the day: the device
-tries again on a later foreground, so "used but offline for a minute" does not read as "not used".
+The day is marked as counted only once the **server has settled it**: accepted the ping, or refused
+it with a 4xx other than 429. A ping that never reached the network (train, lift, captive Wi-Fi), or
+that met a 429 or 5xx, does not spend the day: the device tries again on a later foreground, so
+"used but offline for a minute" does not read as "not used".
 Re-attempts are bounded so this cannot become a retry storm: at most one attempt every
 15 minutes and at most 5 per UTC day, and only one request is ever in flight. Double counting is
 impossible regardless — the server deduplicates on `(app_id, hashed_device_id, ping_date)` using
@@ -679,7 +681,7 @@ diagnostics.lastPingDay           // e.g. "2026-03-01"
 Failures are also written to the system log as `[CutiE] Activity ping not recorded by server (...)`
 with the status/reason only — never a device identifier. Diagnostics are local, read-only state;
 the SDK never reports analytics about analytics. A transient network error is retried **once**,
-two seconds later; an HTTP error is never retried, and a device is counted at most once per UTC day
+two seconds later, unless consent was withdrawn in the meantime; an HTTP error is never retried, and a device is counted at most once per UTC day
 regardless. Counters are in-memory, so they describe this process, not the device's history —
 `lastPingDay` is the only piece that survives a relaunch.
 

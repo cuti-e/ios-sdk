@@ -49,9 +49,10 @@ public struct CutiEActivityPingDiagnostics: Equatable {
 ///
 /// Two properties this class exists to guarantee:
 ///
-/// - **A failed attempt never costs the device its day.** The day marker is written when an HTTP
-///   answer arrives, not when the request leaves. A device that was used but could not reach the
-///   network re-attempts on a later foreground instead of silently vanishing from DAU. Attempts
+/// - **A failed attempt never costs the device its day.** The day marker is written when the
+///   server accepts the ping or refuses it for good (a 4xx other than 429), not when the request
+///   leaves. A device that could not reach the network, or reached a server that answered 429 or
+///   5xx, re-attempts on a later foreground instead of silently vanishing from DAU. Attempts
 ///   are bounded by a cooldown and a per-day cap, so "retry later" cannot become a retry storm.
 ///   Double counting is impossible regardless: the server deduplicates on
 ///   `UNIQUE(app_id, hashed_device_id, ping_date)` using its own UTC date.
@@ -91,8 +92,9 @@ internal class CutiEAnalytics {
             UserDefaults.standard.set(true, forKey: consentAskedKey)
             if newValue {
                 startObservingLifecycle()
-                // Consent is granted by a person tapping something, so the app is in front.
-                sendActivityPingIfNeeded()
+                // setAnalyticsConsent(true) is public, and apps often re-apply stored consent at
+                // launch, which can be a background launch. So insist on the foreground here too.
+                sendActivityPingIfNeeded(requireForeground: true)
             } else {
                 stopObservingLifecycle()
             }
@@ -125,6 +127,17 @@ internal class CutiEAnalytics {
     /// lost (iOS suspends the process while the single retry is waiting), and a wedged flag would
     /// silently stop every later ping in this process.
     private var pingInFlightSince: Date?
+
+    /// Identifies the attempt in flight. A completion that arrives after its attempt was presumed
+    /// lost must not clear the marker of the attempt that replaced it.
+    private var currentAttemptID: UUID?
+
+    /// Whether a ping is on its way. For tests.
+    internal var isPingInFlight: Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return pingInFlightSince != nil
+    }
 
     /// After this long an in-flight ping is assumed lost and a new attempt is allowed.
     internal static let inFlightTimeout: TimeInterval = 60
@@ -283,12 +296,14 @@ internal class CutiEAnalytics {
         guard mayAttemptLocked(today: today, now: now) else { stateLock.unlock(); return }
 
         recordAttemptLocked(today: today, now: now)
+        let attemptID = UUID()
+        currentAttemptID = attemptID
         pingInFlightSince = now
         stateLock.unlock()
 
         let hashedID = generateHashedDeviceID()
         transport(hashedID) { [weak self] outcome in
-            self?.finishPing(outcome, day: today)
+            self?.finishPing(outcome, day: today, attemptID: attemptID)
         }
     }
 
@@ -297,8 +312,12 @@ internal class CutiEAnalytics {
     private func currentTransportLocked() -> ((String, @escaping (CutiEActivityPingOutcome) -> Void) -> Void)? {
         if let override = _pingTransportOverride { return override }
         guard let client = CutiE.shared.apiClient else { return nil }
-        return { hashedID, completion in
-            client.sendActivityPing(hashedDeviceID: hashedID, completion: completion)
+        return { [weak self] hashedID, completion in
+            client.sendActivityPing(
+                hashedDeviceID: hashedID,
+                mayRetry: { self?.isEnabled ?? false },
+                completion: completion
+            )
         }
     }
 
@@ -332,22 +351,39 @@ internal class CutiEAnalytics {
 
     /// Settle one attempt.
     ///
-    /// The day is marked only when the server actually answered — delivered *or* refused. A
-    /// transport failure leaves the day open, because nothing reached the server: no
-    /// `activity_pings` row, no `activity_ping_rejections` row, so silently spending the day
-    /// would turn a used device into an invisible one.
-    private func finishPing(_ outcome: CutiEActivityPingOutcome, day: String) {
+    /// The day is marked only when the outcome settles it (see ``closesDay(_:)``), and never
+    /// moved backwards: a late answer for yesterday must not reopen today.
+    private func finishPing(_ outcome: CutiEActivityPingOutcome, day: String, attemptID: UUID) {
         stateLock.lock()
-        pingInFlightSince = nil
-        switch outcome {
-        case .delivered, .rejected:
+        if currentAttemptID == attemptID {
+            currentAttemptID = nil
+            pingInFlightSince = nil
+        }
+        // yyyy-MM-dd strings order the same way as the days they name.
+        if Self.closesDay(outcome),
+           (UserDefaults.standard.string(forKey: lastPingDayKey) ?? "") < day {
             UserDefaults.standard.set(day, forKey: lastPingDayKey)
-        case .transportFailure:
-            break
         }
         stateLock.unlock()
 
         record(outcome)
+    }
+
+    /// Whether an outcome settles the device for its UTC day.
+    ///
+    /// A delivered ping does, and so does a deliberate refusal (a 4xx other than 429), which the
+    /// server counts. A transport failure, a 429 or a 5xx leaves the day open: the server stored
+    /// nothing, so spending the day would turn a used device into an invisible one. The cooldown
+    /// and the daily cap bound the re-attempts.
+    internal static func closesDay(_ outcome: CutiEActivityPingOutcome) -> Bool {
+        switch outcome {
+        case .delivered:
+            return true
+        case .rejected(let statusCode):
+            return statusCode != 429 && !(500...599).contains(statusCode)
+        case .transportFailure:
+            return false
+        }
     }
 
     /// UTC calendar day, matching the `ping_date` granularity the backend stores.
@@ -456,6 +492,7 @@ internal class CutiEAnalytics {
         _pingTransportOverride = nil
         _isInBackgroundProvider = Self.defaultIsInBackground
         pingInFlightSince = nil
+        currentAttemptID = nil
         for key in [consentKey, consentAskedKey, lastPingDayKey, lastAttemptAtKey, attemptDayKey, attemptCountKey] {
             UserDefaults.standard.removeObject(forKey: key)
         }

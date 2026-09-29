@@ -657,9 +657,12 @@ internal class CutiEAPIClient {
     ///
     /// - Parameters:
     ///   - hashedDeviceID: Pseudonymous device hash. Never logged.
-    ///   - completion: Called once with the final outcome. May run on any queue.
+    ///   - mayRetry: Asked just before the retry is sent. Returning false (consent was withdrawn
+    ///     while the retry waited) ends the attempt without sending anything more.
+    ///   - completion: Called exactly once with the final outcome. May run on any queue.
     func sendActivityPing(
         hashedDeviceID: String,
+        mayRetry: @escaping () -> Bool = { true },
         completion: ((CutiEActivityPingOutcome) -> Void)? = nil
     ) {
         guard let request = makeActivityPingRequest(hashedDeviceID: hashedDeviceID) else {
@@ -667,8 +670,24 @@ internal class CutiEAPIClient {
             return
         }
 
-        performActivityPing(request, retriesRemaining: 1, completion: completion)
+        // Capture the session, not the client, so the attempt still completes if a second
+        // configure() replaces the client while the retry waits.
+        let session = self.session
+        Self.runActivityPing(
+            send: { finish in
+                session.dataTask(with: request) { _, response, error in
+                    finish(response, error)
+                }.resume()
+            },
+            retriesRemaining: 1,
+            retryDelay: Self.activityPingRetryDelay,
+            mayRetry: mayRetry,
+            completion: completion
+        )
     }
+
+    /// Wait before the single retry of a transient transport failure.
+    internal static let activityPingRetryDelay: TimeInterval = 2
 
     private func makeActivityPingRequest(hashedDeviceID: String) -> URLRequest? {
         guard let url = URL(string: "\(configuration.apiURL)/v1/activity/ping") else { return nil }
@@ -697,22 +716,38 @@ internal class CutiEAPIClient {
         return request
     }
 
-    private func performActivityPing(
-        _ request: URLRequest,
+    /// The retry policy on its own, so it can be tested without a network. `send` performs one
+    /// request and hands back its response or error.
+    internal static func runActivityPing(
+        send: @escaping (@escaping (URLResponse?, Error?) -> Void) -> Void,
         retriesRemaining: Int,
+        retryDelay: TimeInterval,
+        mayRetry: @escaping () -> Bool,
         completion: ((CutiEActivityPingOutcome) -> Void)?
     ) {
-        session.dataTask(with: request) { [weak self] _, response, error in
+        send { response, error in
             if let error = error as NSError? {
-                let isTransient = Self.isTransientTransportError(error)
-                if isTransient && retriesRemaining > 0 {
-                    // Exactly one retry, after a short delay. No backoff loop.
-                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
-                        self?.performActivityPing(request, retriesRemaining: retriesRemaining - 1, completion: completion)
-                    }
+                let reason = Self.transportReason(for: error)
+                guard Self.isTransientTransportError(error) && retriesRemaining > 0 else {
+                    completion?(.transportFailure(reason: reason))
                     return
                 }
-                completion?(.transportFailure(reason: Self.transportReason(for: error)))
+                // Exactly one retry, after a short delay. No backoff loop.
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + retryDelay) {
+                    // Consent can be withdrawn while the retry waits, and nothing may be sent
+                    // after that.
+                    guard mayRetry() else {
+                        completion?(.transportFailure(reason: reason))
+                        return
+                    }
+                    Self.runActivityPing(
+                        send: send,
+                        retriesRemaining: retriesRemaining - 1,
+                        retryDelay: retryDelay,
+                        mayRetry: mayRetry,
+                        completion: completion
+                    )
+                }
                 return
             }
 
@@ -726,7 +761,7 @@ internal class CutiEAPIClient {
             } else {
                 completion?(.rejected(statusCode: http.statusCode))
             }
-        }.resume()
+        }
     }
 
     /// Transport errors worth one retry (the network blipped, the server did not answer).

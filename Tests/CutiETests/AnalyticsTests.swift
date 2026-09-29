@@ -97,15 +97,19 @@ final class AnalyticsTests: XCTestCase {
     // MARK: - Safety Without Configuration
 
     func testNoCrashWithoutConfiguration() {
-        // Ensure SDK is not configured
+        // Ensure SDK is not configured, and take the real transport path: setUp's fake transport
+        // would otherwise answer before the missing client is ever noticed.
         let savedConfig = CutiE.shared.configuration
         let savedClient = CutiE.shared.apiClient
         CutiE.shared.configuration = nil
         CutiE.shared.apiClient = nil
+        CutiEAnalytics.shared.pingTransportOverride = nil
 
-        // Enable analytics and trigger ping — should not crash
+        // Enable analytics and trigger ping — should not crash, and must not spend an attempt
         CutiEAnalytics.shared.isEnabled = true
         CutiEAnalytics.shared.sendActivityPingIfNeeded()
+        XCTAssertNil(CutiEAnalytics.shared.diagnostics.lastAttemptDate)
+        XCTAssertFalse(CutiEAnalytics.shared.isPingInFlight)
 
         // Restore
         CutiE.shared.configuration = savedConfig
@@ -554,5 +558,241 @@ final class AnalyticsTests: XCTestCase {
         // (we can't easily verify no network call, but at least no crash)
         CutiEAnalytics.shared.sendActivityPingIfNeeded()
         XCTAssertFalse(CutiEAnalytics.shared.isEnabled)
+    }
+
+    // MARK: - Transport Retry Policy (no network)
+
+    private func http(_ status: Int) -> HTTPURLResponse {
+        HTTPURLResponse(
+            url: URL(string: "https://test.api.com/v1/activity/ping")!,
+            statusCode: status,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+    }
+
+    private func urlError(_ code: Int) -> NSError {
+        NSError(domain: NSURLErrorDomain, code: code)
+    }
+
+    /// Run the real retry policy against scripted results. Returns every outcome handed to the
+    /// completion (the contract is exactly one) and the number of requests sent.
+    private func runScriptedPing(
+        _ results: [(URLResponse?, Error?)],
+        mayRetry: @escaping () -> Bool = { true }
+    ) -> (outcomes: [CutiEActivityPingOutcome], sends: Int) {
+        let lock = NSLock()
+        var script = results
+        var sends = 0
+        var outcomes: [CutiEActivityPingOutcome] = []
+        let settled = expectation(description: "ping settled")
+
+        CutiEAPIClient.runActivityPing(
+            send: { finish in
+                lock.lock()
+                sends += 1
+                let next: (URLResponse?, Error?) = script.isEmpty
+                    ? (nil, self.urlError(NSURLErrorUnknown))
+                    : script.removeFirst()
+                lock.unlock()
+                finish(next.0, next.1)
+            },
+            retriesRemaining: 1,
+            retryDelay: 0,
+            mayRetry: mayRetry,
+            completion: { outcome in
+                lock.lock()
+                outcomes.append(outcome)
+                let first = outcomes.count == 1
+                lock.unlock()
+                if first { settled.fulfill() }
+            }
+        )
+
+        wait(for: [settled], timeout: 2)
+        // Leave room for a second completion to show up, so "exactly once" is really checked.
+        Thread.sleep(forTimeInterval: 0.2)
+        lock.lock()
+        defer { lock.unlock() }
+        return (outcomes, sends)
+    }
+
+    func testTransientFailureIsRetriedOnce() {
+        let result = runScriptedPing([(nil, urlError(NSURLErrorTimedOut)), (http(204), nil)])
+
+        XCTAssertEqual(result.sends, 2)
+        XCTAssertEqual(result.outcomes.count, 1, "The completion runs exactly once")
+        guard case .delivered(let status)? = result.outcomes.first else {
+            return XCTFail("Expected delivered, got \(String(describing: result.outcomes.first))")
+        }
+        XCTAssertEqual(status, 204)
+    }
+
+    func testSecondTransientFailureIsNotRetriedAgain() {
+        let result = runScriptedPing([
+            (nil, urlError(NSURLErrorTimedOut)),
+            (nil, urlError(NSURLErrorTimedOut)),
+            (http(204), nil),
+        ])
+
+        XCTAssertEqual(result.sends, 2, "Exactly one retry, no loop")
+        XCTAssertEqual(result.outcomes.count, 1)
+        guard case .transportFailure(let reason)? = result.outcomes.first else {
+            return XCTFail("Expected a transport failure, got \(String(describing: result.outcomes.first))")
+        }
+        XCTAssertEqual(reason, "urlerror_\(NSURLErrorTimedOut)")
+    }
+
+    func testHTTPErrorIsNeverRetried() {
+        let result = runScriptedPing([(http(503), nil), (http(204), nil)])
+
+        XCTAssertEqual(result.sends, 1)
+        XCTAssertEqual(result.outcomes.count, 1)
+        guard case .rejected(let status)? = result.outcomes.first else {
+            return XCTFail("Expected rejected, got \(String(describing: result.outcomes.first))")
+        }
+        XCTAssertEqual(status, 503)
+    }
+
+    func testNonTransientTransportErrorIsNotRetried() {
+        let result = runScriptedPing([(nil, urlError(NSURLErrorCancelled)), (http(204), nil)])
+
+        XCTAssertEqual(result.sends, 1)
+        XCTAssertEqual(result.outcomes.count, 1)
+        guard case .transportFailure? = result.outcomes.first else {
+            return XCTFail("Expected a transport failure, got \(String(describing: result.outcomes.first))")
+        }
+    }
+
+    func testRetryIsDroppedOnceConsentIsWithdrawn() {
+        // Consent was withdrawn while the retry waited, so nothing more may be sent.
+        let result = runScriptedPing(
+            [(nil, urlError(NSURLErrorTimedOut)), (http(204), nil)],
+            mayRetry: { false }
+        )
+
+        XCTAssertEqual(result.sends, 1, "No request after opt-out")
+        XCTAssertEqual(result.outcomes.count, 1)
+        guard case .transportFailure? = result.outcomes.first else {
+            return XCTFail("Expected a transport failure, got \(String(describing: result.outcomes.first))")
+        }
+    }
+
+    // MARK: - Consent Re-applied at a Background Launch
+
+    func testConsentReappliedDuringABackgroundLaunchDoesNotPing() {
+        var now = day("2026-03-01 03:00")
+        let (analytics, recorder) = makeConsentedAnalytics(at: now)
+        analytics.dateProvider = { now }
+        analytics.isInBackgroundProvider = { true }
+
+        // Apps often re-apply stored consent at launch, and a launch can be a silent push.
+        CutiE.shared.setAnalyticsConsent(true)
+        XCTAssertEqual(recorder.count, 0, "A background launch is not a use, however consent is set")
+
+        now = day("2026-03-01 08:00")
+        analytics.isInBackgroundProvider = { false }
+        analytics.appDidBecomeActive()
+        XCTAssertEqual(recorder.count, 1)
+    }
+
+    // MARK: - 429 and 5xx Leave the Day Open
+
+    func testServerErrorsLeaveTheDayOpen() {
+        for status in [429, 500, 503] {
+            CutiEAnalytics.shared.resetForTesting()
+            var now = day("2026-03-01 09:00")
+            let (analytics, recorder) = makeConsentedAnalytics(at: now)
+            analytics.dateProvider = { now }
+            recorder.outcome = .rejected(statusCode: status)
+
+            analytics.isEnabled = true
+            XCTAssertEqual(recorder.count, 1)
+            XCTAssertNil(analytics.lastPingDay, "HTTP \(status) stored nothing, so the day stays open")
+            XCTAssertEqual(analytics.diagnostics.rejectedCount, 1, "HTTP \(status) is still reported")
+
+            now = day("2026-03-01 12:00")
+            recorder.outcome = .delivered(statusCode: 204)
+            analytics.appDidBecomeActive()
+            XCTAssertEqual(recorder.count, 2, "HTTP \(status): the device re-attempts later that day")
+            XCTAssertEqual(analytics.lastPingDay, "2026-03-01")
+        }
+    }
+
+    // MARK: - Late Completions
+
+    /// Fake transport that holds every completion until the test releases it, in any order.
+    private final class HeldPingRecorder {
+        private(set) var completions: [(CutiEActivityPingOutcome) -> Void] = []
+
+        var transport: (String, @escaping (CutiEActivityPingOutcome) -> Void) -> Void {
+            return { [weak self] _, completion in
+                self?.completions.append(completion)
+            }
+        }
+
+        var count: Int { completions.count }
+    }
+
+    private func makeHeldAnalytics(_ now: @escaping () -> Date) -> (CutiEAnalytics, HeldPingRecorder) {
+        CutiE.shared.configure(appId: "app_test", apiURL: "https://test.api.com")
+        let analytics = CutiEAnalytics.shared
+        let recorder = HeldPingRecorder()
+        analytics.dateProvider = now
+        analytics.pingTransportOverride = recorder.transport
+        return (analytics, recorder)
+    }
+
+    func testALateAnswerForYesterdayDoesNotReopenToday() {
+        var now = day("2026-03-01 23:59")
+        let (analytics, recorder) = makeHeldAnalytics { now }
+
+        analytics.isEnabled = true                    // attempt A, for 2026-03-01, stalls
+        XCTAssertEqual(recorder.count, 1)
+
+        now = day("2026-03-02 00:01")                 // A is presumed lost
+        analytics.appDidBecomeActive()                // attempt B, for 2026-03-02
+        XCTAssertEqual(recorder.count, 2)
+
+        recorder.completions[1](.delivered(statusCode: 204))    // B answers first
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-02")
+
+        recorder.completions[0](.delivered(statusCode: 204))    // A answers late
+        XCTAssertEqual(analytics.lastPingDay, "2026-03-02", "A late answer must not move the day back")
+
+        now = day("2026-03-02 00:20")
+        analytics.appDidBecomeActive()
+        XCTAssertEqual(recorder.count, 2, "2026-03-02 is already counted")
+    }
+
+    func testALateAnswerDoesNotClearTheNewerAttempt() {
+        var now = day("2026-03-01 23:58")
+        let (analytics, recorder) = makeHeldAnalytics { now }
+
+        analytics.isEnabled = true                    // attempt A stalls
+        now = day("2026-03-02 00:00")                 // A is presumed lost
+        analytics.appDidBecomeActive()                // attempt B starts
+        XCTAssertEqual(recorder.count, 2)
+
+        recorder.completions[0](.transportFailure(reason: "urlerror_-1001"))    // A gives up late
+        XCTAssertTrue(analytics.isPingInFlight, "B is still on its way")
+    }
+
+    func testOnlyOneRequestAtATimeAcrossMidnight() {
+        // The previous day's request is still pending when the new UTC day starts. The cooldown
+        // does not carry over to a new day, so only the in-flight marker holds the second request.
+        var now = day("2026-03-01 23:59").addingTimeInterval(40)
+        let (analytics, recorder) = makeHeldAnalytics { now }
+
+        analytics.isEnabled = true                    // attempt A, pending
+        XCTAssertEqual(recorder.count, 1)
+
+        now = day("2026-03-02 00:00").addingTimeInterval(10)    // 30 s later, a new UTC day
+        analytics.appDidBecomeActive()
+        XCTAssertEqual(recorder.count, 1, "One request at a time, even across midnight")
+
+        now = day("2026-03-02 00:01").addingTimeInterval(10)    // 90 s after A: presumed lost
+        analytics.appDidBecomeActive()
+        XCTAssertEqual(recorder.count, 2)
     }
 }
