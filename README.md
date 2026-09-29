@@ -678,8 +678,8 @@ diagnostics.lastPingDay           // e.g. "2026-03-01"
 
 Failures are also written to the system log as `[CutiE] Activity ping not recorded by server (...)`
 with the status/reason only — never a device identifier. Diagnostics are local, read-only state;
-the SDK never reports analytics about analytics. A transient network error is retried **once**
-immediately; an HTTP error is never retried, and a device is counted at most once per UTC day
+the SDK never reports analytics about analytics. A transient network error is retried **once**,
+two seconds later; an HTTP error is never retried, and a device is counted at most once per UTC day
 regardless. Counters are in-memory, so they describe this process, not the device's history —
 `lastPingDay` is the only piece that survives a relaunch.
 
